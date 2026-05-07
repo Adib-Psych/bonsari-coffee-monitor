@@ -472,9 +472,11 @@ const PACK_PRICING = REF.pack_pricing || {};
 const ROAST_YIELD = 1.25;
 let CUSTOMERS = REF.customers || [];
 
+const DEFAULT_WEBHOOK = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
+
 const STATE = {
   pending: { 'sales-gb':[], 'sales-rb':[], 'pengeluaran':[], 'sortasi':[], 'adjustment':[] },
-  webhook_url: '',
+  webhook_url: DEFAULT_WEBHOOK,
   last_sync: null,
   customer_history: {},
   customers_added: [],
@@ -496,7 +498,7 @@ function toast(msg, type='success', dur=3000){
 }
 
 function saveState(){ try { localStorage.setItem('bonsari_entry_v2', JSON.stringify(STATE)); } catch(e) { console.warn('localStorage save failed:', e.message); } }
-function loadState(){ try { const raw = localStorage.getItem('bonsari_entry_v2'); if(raw){ Object.assign(STATE, JSON.parse(raw)); } } catch(e) { console.warn('localStorage load failed:', e.message); } }
+function loadState(){ try { const raw = localStorage.getItem('bonsari_entry_v2'); if(raw){ Object.assign(STATE, JSON.parse(raw)); } if(!STATE.webhook_url) STATE.webhook_url = DEFAULT_WEBHOOK; } catch(e) { console.warn('localStorage load failed:', e.message); STATE.webhook_url = DEFAULT_WEBHOOK; } }
 
 function getCustomer(name){
   if(!name) return null;
