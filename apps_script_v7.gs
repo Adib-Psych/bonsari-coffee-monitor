@@ -84,9 +84,9 @@ function doGet(e) {
     if (!ss.getSheetByName(SHEETS.GB_MOVEMENT)) {
       setupBaseline();
     }
-    // Migrate existing Sortasi rows (idempotent — skips already-migrated batches)
-    // Called on every doGet but cheap due to ref_id duplicate-check
-    migrateExistingSortasi();
+    // V7.3: DO NOT auto-migrate in doGet. Historical sortasi batches are already
+    // reflected in baseline 5 Mei opname (313.97 KG); re-migrating would double-count.
+    // Migration only for NEW batches submitted post-baseline via doPost handlers.
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
@@ -709,6 +709,31 @@ function migrateExistingSortasi() {
   });
   Logger.log('Migrated ' + migrated + ' Sortasi batches to GB_Movement');
   return { ok: true, migrated: migrated };
+}
+
+/**
+ * RESET: Delete all non-baseline rows in GB_Movement.
+ * Use after migration goes wrong, then re-run setupBaseline if needed.
+ */
+function resetMovementsKeepBaseline() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(SHEETS.GB_MOVEMENT);
+  if (!sheet) return { ok:false, err:'GB_Movement not found' };
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok:true, deleted:0 };
+  const data = sheet.getRange(2,1,lastRow-1,sheet.getLastColumn()).getValues();
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  const sourceCol = headers.indexOf('source');
+  let deleted = 0;
+  // Iterate from bottom to safely delete
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i][sourceCol] !== 'baseline') {
+      sheet.deleteRow(i + 2);
+      deleted++;
+    }
+  }
+  Logger.log('Reset complete: ' + deleted + ' non-baseline movement rows deleted');
+  return { ok:true, deleted:deleted };
 }
 
 /**
