@@ -525,7 +525,9 @@ function init(){
   ['gb-date','rb-date','exp-date','srt-tgl-ambil','adj-date'].forEach(id=>{ const el = document.getElementById(id); if(el) el.value = todayStr(); });
   populateCustomerDatalist();
   const sl = document.getElementById('suppliers-list');
-  (REF.suppliers||[]).forEach(s=>{ const o=document.createElement('option'); o.value=s; sl.appendChild(o); });
+  // Sort suppliers alphabetically too
+  [...(REF.suppliers||[])].sort((a,b) => String(a||'').localeCompare(String(b||''), 'id', {sensitivity:'base'}))
+    .forEach(s=>{ const o=document.createElement('option'); o.value=s; sl.appendChild(o); });
   setupListeners();
   renderAllPending();
   renderPriceRefTable();
@@ -538,7 +540,16 @@ function init(){
 function populateCustomerDatalist(){
   const list = document.getElementById('customers-list');
   list.innerHTML = '';
-  allCustomers().forEach(c=>{ const o = document.createElement('option'); o.value = c.name; o.label = c.type; list.appendChild(o); });
+  // Sort customers alphabetically (case-insensitive, locale-aware) for easier scrolling
+  const sorted = [...allCustomers()].sort((a, b) => 
+    (a.name || '').localeCompare(b.name || '', 'id', {sensitivity: 'base'})
+  );
+  sorted.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.name;
+    o.label = c.type;
+    list.appendChild(o);
+  });
 }
 
 function updateLiveStock(){
