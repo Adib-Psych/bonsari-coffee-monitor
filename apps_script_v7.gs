@@ -80,6 +80,10 @@ const BASELINE_5MEI = [
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.openById(SHEET_ID);
+    // V7 bootstrap: ensure GB_Movement sheet + baseline exists (idempotent)
+    if (!ss.getSheetByName(SHEETS.GB_MOVEMENT)) {
+      setupBaseline();
+    }
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
