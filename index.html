@@ -597,6 +597,93 @@ footer a{color:var(--steel);text-decoration:none}
     </div>
   </div>
 
+  <!-- ✨ EDUCATIONAL EXPLAINER PANEL — for non-finance background -->
+  <div class="section" style="background:#FFF7ED;border-left:4px solid #E8975A;border-radius:10px">
+    <h2 style="color:#7A4A1F">📖 Bingung dengan 3 angka berbeda? Tenang — ini penjelasannya</h2>
+    <div class="note" style="background:transparent;border-left:none;padding:0;color:#7A4A1F;margin-bottom:18px">
+      Di tab Akuntansi ini ada 3 cara melihat &quot;keuntungan&quot;. Kelihatannya mirip tapi konsepnya beda. Mari kita bedah satu-satu pakai analogi sederhana.
+    </div>
+
+    <!-- 3-card grid -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:18px">
+
+      <!-- Card 1: Net Profit P&amp;L -->
+      <div style="background:#fff;border:2px solid #5B9279;border-radius:10px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">📊</span>
+          <strong style="color:#2D5640;font-size:14px;text-transform:uppercase;letter-spacing:0.04em">Net Profit (P&amp;L)</strong>
+        </div>
+        <div style="font-size:24px;font-weight:700;color:#2D5640" id="ed-pl">Rp 12,32 jt</div>
+        <div style="font-size:11px;color:#5B9279;font-weight:600;margin-bottom:10px" id="ed-pl-pct">Margin 15,4%</div>
+        <div style="font-size:12.5px;line-height:1.6;color:#3F6E55">
+          <strong>Apa ini?</strong> Untung dari operasi bisnis selama 7 bulan, dihitung pakai prinsip akuntansi (akrual basis).<br>
+          <strong>Rumus:</strong> Sales − HPP − OpEx − Depresiasi.<br>
+          <strong>Analogi:</strong> Kalau Adib jualan Rp 80jt, modal barang (HPP) Rp 62jt, biaya operasi Rp 5jt, alat susut Rp 0,8jt → untung di buku <strong>Rp 12,3jt</strong>.
+        </div>
+      </div>
+
+      <!-- Card 2: Net Profit Real -->
+      <div style="background:#fff;border:2px solid #3A6EA5;border-radius:10px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">💎</span>
+          <strong style="color:#1B2A41;font-size:14px;text-transform:uppercase;letter-spacing:0.04em">Net Profit Real</strong>
+        </div>
+        <div style="font-size:24px;font-weight:700;color:#1B2A41" id="ed-real">Rp 12,32 jt</div>
+        <div style="font-size:11px;color:#3A6EA5;font-weight:600;margin-bottom:10px" id="ed-real-pct">Bottom-line 15,4%</div>
+        <div style="font-size:12.5px;line-height:1.6;color:#2A3F58">
+          <strong>Apa ini?</strong> Versi lebih konservatif — Net Profit P&amp;L setelah deduct biaya yang sering &quot;lupa dihitung&quot;: pajak UMKM (0,5%) + carrying cost inventory (5%/tahun).<br>
+          <strong>Analogi:</strong> Kalau buku catat untung Rp 12,3jt, tapi inget juga ada pajak ~Rp 400rb dan opportunity cost stock yang nyangkut — angka realistik take-home jadi sedikit lebih kecil.<br>
+          <em style="font-size:11.5px;color:#5B89BF">⚠️ Saat ini pajak &amp; carrying cost belum di-deduct di live calc — angkanya masih sama dengan P&amp;L.</em>
+        </div>
+      </div>
+
+      <!-- Card 3: Net Worth Neraca -->
+      <div style="background:#fff;border:2px solid #C99B47;border-radius:10px;padding:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:22px">🏛️</span>
+          <strong style="color:#7A4A1F;font-size:14px;text-transform:uppercase;letter-spacing:0.04em">Net Worth (Neraca)</strong>
+        </div>
+        <div style="font-size:24px;font-weight:700;color:#7A4A1F" id="ed-networth">+Rp 8,31 jt</div>
+        <div style="font-size:11px;color:#C99B47;font-weight:600;margin-bottom:10px" id="ed-networth-pct">Bisnis tumbuh 10,7%</div>
+        <div style="font-size:12.5px;line-height:1.6;color:#5C3A1A">
+          <strong>Apa ini?</strong> Berapa <em>nilai bisnis</em> tumbuh dari modal awal yang Adib masukkan.<br>
+          <strong>Rumus:</strong> Total Aset − Modal Awal.<br>
+          <strong>Analogi:</strong> Adib masuk modal Rp 77,75jt. Sekarang aset bisnis (kas + stock + alat) total Rp 86,06jt. Berarti bisnis sudah <strong>menghasilkan tambahan Rp 8,31jt</strong> dalam 7 bulan.
+        </div>
+      </div>
+    </div>
+
+    <!-- Q&amp;A -->
+    <div style="background:#fff;border:1px solid #E8975A;border-radius:8px;padding:14px;margin-bottom:14px">
+      <div style="font-weight:700;color:#7A4A1F;margin-bottom:8px;font-size:13px">❓ Pertanyaan yang sering muncul</div>
+      <div style="font-size:12.5px;line-height:1.7;color:#444">
+
+        <strong>Q: Kenapa Net Profit (Rp 12,3 jt) ≠ Net Worth (Rp 8,3 jt)? Selisih Rp 4 jt itu apa?</strong><br>
+        A: Idealnya keduanya sama. Selisih Rp 4 jt terjadi karena <strong>cost variance</strong> — HPP yang dipakai di P&amp;L (Rp 74.341/KG GBP, dll) adalah harga &quot;locked&quot; standar, bukan biaya beli aktual yang weighted average. Selisih ini biasa dan akan reconcile saat opname fisik final.<br><br>
+
+        <strong>Q: Mana yang harus saya percaya untuk decision making?</strong><br>
+        A: Tergantung pertanyaannya:<br>
+        • <strong>&quot;Bisnis untung berapa bulan ini?&quot;</strong> → pakai <strong>Net Profit P&amp;L</strong> (12,3jt)<br>
+        • <strong>&quot;Cash bersih yang bisa saya ambil ke kantong?&quot;</strong> → pakai <strong>Saldo Rekening Liquid</strong> (46jt) — bukan Net Profit<br>
+        • <strong>&quot;Bisnis sudah growth berapa dari modal?&quot;</strong> → pakai <strong>Net Worth</strong> (8,3jt = +10,7%)<br>
+        • <strong>&quot;Sudah balik modal (BEP)?&quot;</strong> → pakai <strong>BEP Progress di header</strong> (23,8% — masih jauh dari balik modal Rp 77,75jt)<br><br>
+
+        <strong>Q: Kenapa angka Saldo Rekening (46jt) jauh lebih kecil dari Net Profit (12jt)?</strong><br>
+        A: Jangan bandingkan apple-to-apple. <strong>Saldo Rekening</strong> = sisa cash di bank, sudah dikurangi semua pengeluaran termasuk modal awal. <strong>Net Profit</strong> = untung dari operasi setelah biaya. Kalau modal awal dipakai semua untuk beli stock, Net Profit bisa positif tapi Saldo Rekening kecil karena cash &quot;tertahan&quot; di stock.<br><br>
+
+        <strong>Q: Kapan saya tau bisnis sehat?</strong><br>
+        A: 3 sinyal:<br>
+        ✅ <strong>Net Profit positif</strong> → bisnis menghasilkan untung dari operasi<br>
+        ✅ <strong>Net Worth tumbuh</strong> → modal Adib bertambah nilainya<br>
+        ✅ <strong>Saldo Rekening cukup</strong> → ada cash buat operasional sehari-hari (tidak harus banyak — yang penting cukup untuk beli stock + bayar biaya rutin)
+      </div>
+    </div>
+
+    <div style="background:#FAFCFE;border:1px solid #D6E2F0;border-radius:8px;padding:12px;font-size:11.5px;color:#5C7A99;font-style:italic">
+      💡 <strong>Catatan untuk pemula bisnis:</strong> Akuntansi pada dasarnya cuma menjawab 2 pertanyaan: (1) <strong>Untung atau rugi?</strong> → lihat P&amp;L, (2) <strong>Punya apa &amp; utang berapa?</strong> → lihat Neraca. Kalau bingung, fokus ke 3 angka saja: <strong>Net Profit</strong>, <strong>Net Worth</strong>, dan <strong>Saldo Rekening</strong>. Sisanya adalah detail untuk drill-down.
+    </div>
+  </div>
+
   <!-- Margin Distribution Section -->
   <div class="section">
     <h2>📊 Distribusi Margin <span class="badge">From Sales to Net Profit · per layer</span></h2>
@@ -1543,6 +1630,21 @@ document.getElementById('acct-netprofit').textContent = fmt(netProfit);
 document.getElementById('acct-netprofit-sub').textContent = 'Margin ' + (netProfit/D.kpi.total_sales*100).toFixed(1)+'% (akrual basis)';
 document.getElementById('acct-networth').textContent = '+' + fmt(netWorth);
 document.getElementById('acct-networth-sub').textContent = 'Bisnis tumbuh ' + (netWorth/A.neraca.modal_awal*100).toFixed(1)+'% dari modal';
+
+// === Educational Explainer Panel — populate dynamic values ===
+(function(){
+  const fmtJt = n => 'Rp ' + (n/1e6).toFixed(2).replace('.',',') + ' jt';
+  const netProfit = A.pl.net_profit;
+  const margin = (netProfit / A.pl.sales * 100).toFixed(1).replace('.',',');
+  const netWorthPct = (netWorth / A.neraca.modal_awal * 100).toFixed(1).replace('.',',');
+  const setIf = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setIf('ed-pl', fmtJt(netProfit));
+  setIf('ed-pl-pct', 'Margin ' + margin + '%');
+  setIf('ed-real', fmtJt(netProfit));
+  setIf('ed-real-pct', 'Bottom-line ' + margin + '%');
+  setIf('ed-networth', (netWorth >= 0 ? '+' : '') + fmtJt(netWorth));
+  setIf('ed-networth-pct', 'Bisnis tumbuh ' + netWorthPct + '%');
+})();
 
 // Reclass cards
 const reclassMeta = {
