@@ -328,40 +328,70 @@
     </div>
     <div id="worker-stats-panel" style="font-size:12px"><div style="text-align:center;color:var(--muted);padding:14px;font-size:11.5px">Loading worker stats...</div></div>
   </div>
+  <!-- ✨ V7 MODE TOGGLE: 2 form terpisah biar pekerja jelas di kolom mana -->
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <button id="srt-mode-keluar-btn" class="srt-mode-btn srt-mode-active" onclick="setSortasiMode('keluar')"
+      style="flex:1;padding:14px;background:#3A6EA5;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s">
+      ↗️ Mode A: GB Keluar (kirim ke pekerja)
+    </button>
+    <button id="srt-mode-kembali-btn" class="srt-mode-btn" onclick="setSortasiMode('kembali')"
+      style="flex:1;padding:14px;background:#fff;color:#3A6EA5;border:2px solid #3A6EA5;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s">
+      ↙️ Mode B: GB Kembali (terima setoran)
+    </button>
+  </div>
   <div class="form-grid">
-    <div class="form-card">
-      <h2>🌿 Entry Sortasi Batch</h2>
-      <div class="form-sub">Track batch sortir: Kirim atau Kembali Sorted.</div>
+    <!-- ============ MODE A: GB KELUAR ============ -->
+    <div class="form-card" id="srt-form-keluar">
+      <h2>↗️ GB Keluar — Kirim ke Pekerja</h2>
+      <div class="form-sub">Saat GB diserahkan ke pekerja untuk disortir. Stok GB akan otomatis berkurang.</div>
       <div class="field-row">
-        <div class="field"><label>👷 Pekerja</label><select id="srt-pekerja"><option value="">-- Pilih --</option><option value="Mba Etsa">Mba Etsa</option><option value="Mba Pipit">Mba Pipit</option></select></div>
-        <div class="field"><label>📌 Status Batch</label><select id="srt-status" onchange="onSortirStatusChange()"><option value="kirim">↗️ Kirim ke Sortir</option><option value="kembali">↙️ Kembali Sorted</option></select></div>
-      </div>
-      <div class="field-row-3">
+        <div class="field"><label>👷 Pekerja</label><select id="srt-pekerja-keluar"><option value="">-- Pilih --</option><option value="Mba Etsa">Mba Etsa</option><option value="Mba Pipit">Mba Pipit</option></select></div>
         <div class="field"><label>📅 Tgl Ambil</label><input type="date" id="srt-tgl-ambil" /></div>
-        <div class="field"><label>📦 Bakalan</label><select id="srt-bakalan"><option value="GBP">Bakalan GBP</option><option value="GBC">Bakalan GBC</option><option value="GBL">Bakalan Lanang</option><option value="MIX">Mixed</option></select></div>
-        <div class="field"><label>⚖️ Input (KG)</label><input type="number" id="srt-input-kg" step="0.01" /></div>
       </div>
-      <div id="srt-output-section" style="display:none">
-        <div style="font-weight:700;color:var(--primary);margin:14px 0 8px;font-size:14px">📤 Output Detail (saat kembali)</div>
-        <div class="field"><label>📅 Tgl Setor</label><input type="date" id="srt-tgl-setor" /></div>
-        <div class="field-row-3">
-          <div class="field"><label>⭐ GBP</label><input type="number" id="srt-gbp" step="0.001" /></div>
-          <div class="field"><label>📦 GBC</label><input type="number" id="srt-gbc" step="0.001" /></div>
-          <div class="field"><label>🍃 GBL</label><input type="number" id="srt-gbl" step="0.001" /></div>
-        </div>
-        <div class="field-row">
-          <div class="field"><label>📥 GBS</label><input type="number" id="srt-gbs" step="0.001" /></div>
-          <div class="field"><label>💰 Ongkos (Rp)</label><input type="number" id="srt-ongkos" step="500" /></div>
-        </div>
-        <div class="margin-display" style="grid-template-columns:repeat(3,1fr)">
-          <div class="item"><div class="lbl">Total Setor</div><div class="val" id="srt-total-setor">— KG</div></div>
-          <div class="item"><div class="lbl">Susut</div><div class="val" id="srt-susut">— KG</div></div>
-          <div class="item"><div class="lbl">Yield</div><div class="val" id="srt-yield">—%</div></div>
-        </div>
+      <div class="field-row">
+        <div class="field"><label>📦 Bakalan (Grade Input)</label><select id="srt-bakalan"><option value="GBO">GBO (Original raw)</option><option value="Bakalan GBP">Bakalan GBP</option><option value="Bakalan GBC">Bakalan GBC</option><option value="Bakalan GBL">Bakalan Lanang</option></select></div>
+        <div class="field"><label>⚖️ Qty Input (KG)</label><input type="number" id="srt-input-kg" step="0.01" placeholder="e.g. 30.5" /></div>
       </div>
-      <div id="srt-validation"></div>
-      <div class="btn-row"><button class="btn btn-secondary" onclick="resetForm('sortasi')">🔄 Reset</button><button class="btn btn-primary" onclick="submitEntry('sortasi')">✅ Submit & Sync</button></div>
+      <div style="background:#F0F7E8;border-left:3px solid #5B9279;padding:10px 12px;font-size:11.5px;color:#2D5640;margin-top:10px;border-radius:4px">
+        💡 Setelah submit: <strong>stok GB akan otomatis berkurang</strong> di tempat, dan <strong>tercatat di tangan pekerja</strong>. Batch ID auto-generated untuk tracking saat kembali.
+      </div>
+      <div id="srt-validation-keluar"></div>
+      <div class="btn-row"><button class="btn btn-secondary" onclick="resetForm('sortasi')">🔄 Reset</button><button class="btn btn-primary" onclick="submitEntry('sortasi-keluar')">✅ Submit Keluar</button></div>
     </div>
+
+    <!-- ============ MODE B: GB KEMBALI ============ -->
+    <div class="form-card" id="srt-form-kembali" style="display:none">
+      <h2>↙️ GB Kembali — Terima Setoran</h2>
+      <div class="form-sub">Saat pekerja mengembalikan hasil sortasi. Pilih batch keluar yang outstanding, lalu input setoran per grade.</div>
+      <div class="field"><label>📋 Pilih Batch Outstanding</label>
+        <select id="srt-batch-id" onchange="onBatchSelected()">
+          <option value="">-- Loading batches outstanding... --</option>
+        </select>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:4px" id="srt-batch-info">Pilih batch dari list di atas. Auto-fetch dari API.</div>
+      </div>
+      <div class="field"><label>📅 Tgl Setor</label><input type="date" id="srt-tgl-setor" /></div>
+      <div style="font-weight:700;color:var(--primary);margin:14px 0 8px;font-size:14px">📤 Output Detail per Grade</div>
+      <div class="field-row-3">
+        <div class="field"><label>⭐ GBP</label><input type="number" id="srt-gbp" step="0.001" placeholder="0" /></div>
+        <div class="field"><label>📦 GBC</label><input type="number" id="srt-gbc" step="0.001" placeholder="0" /></div>
+        <div class="field"><label>🍃 GBL</label><input type="number" id="srt-gbl" step="0.001" placeholder="0" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>📥 GBS</label><input type="number" id="srt-gbs" step="0.001" placeholder="0" /></div>
+        <div class="field"><label>💰 Ongkos (Rp) <span style="font-size:10px;color:var(--muted)">auto-calc</span></label><input type="number" id="srt-ongkos" step="500" placeholder="auto" /></div>
+      </div>
+      <div class="margin-display" style="grid-template-columns:repeat(3,1fr)">
+        <div class="item"><div class="lbl">Total Setor</div><div class="val" id="srt-total-setor">— KG</div></div>
+        <div class="item"><div class="lbl">Susut</div><div class="val" id="srt-susut">— KG</div></div>
+        <div class="item"><div class="lbl">Yield</div><div class="val" id="srt-yield">—%</div></div>
+      </div>
+      <div style="background:#FFF7ED;border-left:3px solid #E8975A;padding:10px 12px;font-size:11.5px;color:#7A4A1F;margin-top:10px;border-radius:4px">
+        💡 Setelah submit: <strong>stok per grade output otomatis bertambah</strong> di tempat, <strong>stok di tangan pekerja berkurang</strong>. Ongkos = (total setor − GBS) × Rp 3.000.
+      </div>
+      <div id="srt-validation-kembali"></div>
+      <div class="btn-row"><button class="btn btn-secondary" onclick="resetForm('sortasi')">🔄 Reset</button><button class="btn btn-primary" onclick="submitEntry('sortasi-kembali')">✅ Submit Kembali</button></div>
+    </div>
+
     <div class="side-panel">
       <div class="panel-card"><h3>📋 Pending Entries</h3><div class="pending-list" id="pending-sortasi"></div></div>
       <div class="panel-card"><h3>📊 Yield Reference</h3><div style="font-size:11.5px;color:var(--muted);line-height:1.7">Avg yield (66 batch):<br/><strong style="color:var(--info)">GBP: ~63%</strong> · <strong>GBC: ~6%</strong><br/><strong style="color:var(--success)">GBL: ~14%</strong> · <strong>GBS: ~13%</strong><br/><strong style="color:var(--danger)">Susut: ~1%</strong><br/>Standard ongkos: <strong>Rp 3.000/KG</strong> output</div></div>
@@ -578,7 +608,13 @@ function updateLiveStock(){
 function setupListeners(){
   ['gb-customer','gb-product','gb-qty','gb-price'].forEach(id=>{ const el = document.getElementById(id); el.addEventListener('input', recalcGB); el.addEventListener('change', recalcGB); });
   ['rb-customer','rb-product','rb-pack','rb-packs','rb-price'].forEach(id=>{ const el = document.getElementById(id); el.addEventListener('input', recalcRB); el.addEventListener('change', recalcRB); });
-  ['srt-input-kg','srt-gbp','srt-gbc','srt-gbl','srt-gbs'].forEach(id=>{ document.getElementById(id).addEventListener('input', recalcSortasi); });
+  ['srt-input-kg','srt-gbp','srt-gbc','srt-gbl','srt-gbs','srt-batch-id'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el){
+      el.addEventListener('input', recalcSortasi);
+      if(el.tagName === 'SELECT') el.addEventListener('change', recalcSortasi);
+    }
+  });
   ['exp-amount','exp-qty'].forEach(id=>{ document.getElementById(id).addEventListener('input', recalcExp); });
 }
 
@@ -652,15 +688,26 @@ function recalcRB(e){
 }
 
 function recalcSortasi(){
-  const inp = parseFloat(document.getElementById('srt-input-kg').value)||0;
-  const gbp = parseFloat(document.getElementById('srt-gbp').value)||0;
-  const gbc = parseFloat(document.getElementById('srt-gbc').value)||0;
-  const gbl = parseFloat(document.getElementById('srt-gbl').value)||0;
-  const gbs = parseFloat(document.getElementById('srt-gbs').value)||0;
+  // V7: input KG comes from either Mode A field OR Mode B selected batch
+  let inp = 0;
+  const inputField = document.getElementById('srt-input-kg');
+  const batchSelect = document.getElementById('srt-batch-id');
+  if(inputField && inputField.value){
+    inp = parseFloat(inputField.value)||0;
+  } else if(batchSelect && batchSelect.selectedOptions[0]){
+    inp = parseFloat(batchSelect.selectedOptions[0].dataset.qty || 0);
+  }
+  const gbp = parseFloat((document.getElementById('srt-gbp')||{}).value||0)||0;
+  const gbc = parseFloat((document.getElementById('srt-gbc')||{}).value||0)||0;
+  const gbl = parseFloat((document.getElementById('srt-gbl')||{}).value||0)||0;
+  const gbs = parseFloat((document.getElementById('srt-gbs')||{}).value||0)||0;
   const tot = gbp+gbc+gbl+gbs;
-  document.getElementById('srt-total-setor').textContent = fmtN(tot,3)+' KG';
-  document.getElementById('srt-susut').textContent = fmtN(inp-tot,3)+' KG';
-  document.getElementById('srt-yield').textContent = fmtN(inp>0?(tot/inp*100):0,1)+'%';
+  const totEl = document.getElementById('srt-total-setor');
+  if(totEl) totEl.textContent = fmtN(tot,3)+' KG';
+  const susutEl = document.getElementById('srt-susut');
+  if(susutEl) susutEl.textContent = fmtN(inp-tot,3)+' KG';
+  const yieldEl = document.getElementById('srt-yield');
+  if(yieldEl) yieldEl.textContent = fmtN(inp>0?(tot/inp*100):0,1)+'%';
   // Auto-calc ongkos = (total_setor - gbs) × 3000 (GBS excl)
   const ongkosCalc = Math.round((tot - gbs) * 3000);
   const ongkosField = document.getElementById('srt-ongkos');
@@ -930,12 +977,85 @@ function onKategoriChange(){
 }
 
 function onSortirStatusChange(){
-  const s = document.getElementById('srt-status').value;
-  document.getElementById('srt-output-section').style.display = s==='kembali'?'':'none';
+  // Legacy compat — kept for backwards compatibility, no-op since UI now uses 2 modes
+  return;
+}
+
+// === V7 SORTASI 2-MODE TOGGLE ===
+window.__sortasiMode = 'keluar'; // default
+function setSortasiMode(mode){
+  window.__sortasiMode = mode;
+  const keluarBtn = document.getElementById('srt-mode-keluar-btn');
+  const kembaliBtn = document.getElementById('srt-mode-kembali-btn');
+  const keluarForm = document.getElementById('srt-form-keluar');
+  const kembaliForm = document.getElementById('srt-form-kembali');
+  if(mode === 'keluar'){
+    keluarBtn.style.background = '#3A6EA5'; keluarBtn.style.color = '#fff'; keluarBtn.style.border = 'none';
+    kembaliBtn.style.background = '#fff'; kembaliBtn.style.color = '#3A6EA5'; kembaliBtn.style.border = '2px solid #3A6EA5';
+    keluarForm.style.display = '';
+    kembaliForm.style.display = 'none';
+  } else {
+    kembaliBtn.style.background = '#E8975A'; kembaliBtn.style.color = '#fff'; kembaliBtn.style.border = 'none';
+    keluarBtn.style.background = '#fff'; keluarBtn.style.color = '#3A6EA5'; keluarBtn.style.border = '2px solid #3A6EA5';
+    keluarForm.style.display = 'none';
+    kembaliForm.style.display = '';
+    // Auto-fetch outstanding batches when switching to kembali
+    fetchOutstandingBatches();
+  }
+}
+
+// Fetch outstanding batches (status='kirim', no setor yet) for Mode B dropdown
+async function fetchOutstandingBatches(){
+  const select = document.getElementById('srt-batch-id');
+  if(!select) return;
+  select.innerHTML = '<option value="">⏳ Loading outstanding batches...</option>';
+  try {
+    const url = STATE.webhook_url || 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
+    const r = await fetch(url + '?data=all', { method:'GET' });
+    const j = await r.json();
+    const sortasi = j?.data?.sortasi || [];
+    const outstanding = sortasi.filter(s => {
+      const status = (s.batch_status || '').toLowerCase();
+      const totalSetor = parseFloat(s.total_setor || 0);
+      return status === 'kirim' || (!s.tgl_setor || totalSetor === 0);
+    });
+    if(outstanding.length === 0){
+      select.innerHTML = '<option value="">⚠ Tidak ada batch outstanding</option>';
+      return;
+    }
+    // Sort by tgl_ambil desc
+    outstanding.sort((a,b) => (b.tgl_ambil || '').localeCompare(a.tgl_ambil || ''));
+    select.innerHTML = '<option value="">-- Pilih batch --</option>' +
+      outstanding.map(s => {
+        const dt = (s.tgl_ambil || '').slice(0,10);
+        const w = s.pekerja || '?';
+        const qty = parseFloat(s.qty_input || 0).toFixed(1);
+        const grd = s.grade_input || s.bakalan || 'GBO';
+        return `<option value="${s.id}" data-pekerja="${w}" data-qty="${qty}" data-grade="${grd}">${dt} · ${w} · ${qty} KG ${grd}</option>`;
+      }).join('');
+  } catch(e){
+    select.innerHTML = '<option value="">⚠ Error fetching: ' + e.message + '</option>';
+  }
+}
+
+function onBatchSelected(){
+  const select = document.getElementById('srt-batch-id');
+  const opt = select.selectedOptions[0];
+  if(!opt || !opt.value){
+    document.getElementById('srt-batch-info').textContent = 'Pilih batch dari list di atas. Auto-fetch dari API.';
+    return;
+  }
+  const pekerja = opt.dataset.pekerja || '';
+  const qty = opt.dataset.qty || '';
+  const grade = opt.dataset.grade || '';
+  document.getElementById('srt-batch-info').innerHTML = `Batch: <strong>${pekerja}</strong> · ${qty} KG ${grade} · Output max ~${qty} KG (boleh sedikit lebih kalo basah)`;
 }
 
 function resetForm(tab){
-  const pane = document.getElementById('pane-'+tab);
+  // V7: normalize sortasi-keluar/sortasi-kembali → 'sortasi' for pane lookup
+  const paneKey = (tab === 'sortasi-keluar' || tab === 'sortasi-kembali') ? 'sortasi' : tab;
+  const pane = document.getElementById('pane-'+paneKey);
+  if(!pane) return;
   pane.querySelectorAll('input, textarea').forEach(el=>{
     if(el.type==='date') el.value = todayStr();
     else if(el.id==='rb-packs') el.value = '1';
@@ -958,10 +1078,13 @@ function submitEntry(tab){
     if(!STATE.customer_history[r.data.customer]) STATE.customer_history[r.data.customer] = {};
     STATE.customer_history[r.data.customer][r.data.produk] = r.data.harga_per_kg||r.data.harga_per_pack;
   }
-  STATE.pending[tab].push(r.data);
+  // V7: Normalize sortasi-keluar/sortasi-kembali → 'sortasi' bucket
+  const bucket = (tab === 'sortasi-keluar' || tab === 'sortasi-kembali') ? 'sortasi' : tab;
+  if(!STATE.pending[bucket]) STATE.pending[bucket] = [];
+  STATE.pending[bucket].push(r.data);
   saveState();
-  renderPending(tab);
-  if(STATE.webhook_url){ syncEntry(tab, r.data); }
+  renderPending(bucket);
+  if(STATE.webhook_url){ syncEntry(bucket, r.data); }
   else { toast('Saved locally. Set webhook URL in Settings to enable sync.', 'warning', 4000); }
   resetForm(tab);
 }
@@ -1015,30 +1138,39 @@ function collectForm(tab){
     if(amt<=0) errors.push('Total harus > 0');
     if(kategori==='Pembelian Green Bean' && !sup) errors.push('Supplier wajib');
     data = { id, created, type:'pengeluaran', status:'pending', tanggal:date, kategori, deskripsi:desc, total:amt, supplier:sup||null, qty:qty||null, harga_per_kg:(amt&&qty)?amt/qty:null, catatan:note };
-  } else if(tab==='sortasi'){
-    const pekerja = document.getElementById('srt-pekerja').value;
-    const status = document.getElementById('srt-status').value;
+  } else if(tab==='sortasi-keluar'){
+    // V7 Mode A: GB Keluar
+    const pekerja = document.getElementById('srt-pekerja-keluar').value;
     const tglA = document.getElementById('srt-tgl-ambil').value;
     const bakalan = document.getElementById('srt-bakalan').value;
     const inp = parseFloat(document.getElementById('srt-input-kg').value)||0;
+    // Determine grade_input from bakalan
+    let gradeInput = 'GBO';
+    const bUpper = bakalan.toUpperCase();
+    if(bUpper.indexOf('GBP')>=0) gradeInput = 'GBP';
+    else if(bUpper.indexOf('GBC')>=0) gradeInput = 'GBC';
+    else if(bUpper.indexOf('GBL')>=0 || bUpper.indexOf('LANANG')>=0) gradeInput = 'GBL';
     if(!pekerja) errors.push('Pekerja wajib');
     if(!tglA) errors.push('Tgl ambil wajib');
     if(inp<=0) errors.push('Input KG > 0');
-    let out = {};
-    if(status==='kembali'){
-      const tglS = document.getElementById('srt-tgl-setor').value;
-      const gbp = parseFloat(document.getElementById('srt-gbp').value)||0;
-      const gbc = parseFloat(document.getElementById('srt-gbc').value)||0;
-      const gbl = parseFloat(document.getElementById('srt-gbl').value)||0;
-      const gbs = parseFloat(document.getElementById('srt-gbs').value)||0;
-      const ong = parseFloat(document.getElementById('srt-ongkos').value)||0;
-      const tot = gbp+gbc+gbl+gbs;
-      if(!tglS) errors.push('Tgl setor wajib');
-      if(tot<=0) errors.push('Output min 1 grade');
-      if(tot>inp*1.05) errors.push('Yield > 105%');
-      out = { tgl_setor:tglS, gbp, gbc, gbl, gbs, total_setor:tot, susut:inp-tot, yield_pct:tot/inp*100, ongkos:ong };
-    }
-    data = { id, created, type:'sortasi', status:'pending', pekerja, batch_status:status, tgl_ambil:tglA, bakalan:'Bakalan '+bakalan, qty_input:inp, ...out };
+    data = { id, created, type:'sortasi', action:'submit_sortasi_keluar', status:'pending',
+      pekerja, batch_status:'kirim', tgl_ambil:tglA, bakalan, grade_input:gradeInput, qty_input:inp };
+  } else if(tab==='sortasi-kembali'){
+    // V7 Mode B: GB Kembali — needs batch_id from dropdown
+    const batchId = document.getElementById('srt-batch-id').value;
+    const tglS = document.getElementById('srt-tgl-setor').value;
+    const gbp = parseFloat(document.getElementById('srt-gbp').value)||0;
+    const gbc = parseFloat(document.getElementById('srt-gbc').value)||0;
+    const gbl = parseFloat(document.getElementById('srt-gbl').value)||0;
+    const gbs = parseFloat(document.getElementById('srt-gbs').value)||0;
+    const ong = parseFloat(document.getElementById('srt-ongkos').value)||0;
+    const tot = gbp+gbc+gbl+gbs;
+    if(!batchId) errors.push('Pilih batch outstanding dulu');
+    if(!tglS) errors.push('Tgl setor wajib');
+    if(tot<=0) errors.push('Output min 1 grade');
+    data = { id, created, type:'sortasi', action:'submit_sortasi_kembali', status:'pending',
+      batch_id:batchId, tgl_setor:tglS, gbp, gbc, gbl, gbs,
+      total_setor:tot, ongkos:ong };
   } else if(tab==='adjustment'){
     const date = document.getElementById('adj-date').value;
     const grade = document.getElementById('adj-grade').value;
@@ -1082,7 +1214,10 @@ async function syncEntry(tab, entry){
   if(!STATE.webhook_url){ toast('Webhook URL belum di-set','error'); return; }
   updateSyncChip('syncing');
   try{
-    await fetch(STATE.webhook_url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify({ tab, entry }) });
+    // V7: send entry directly (action field already set in collectForm)
+    // For backward compat: include 'tab' AND spread entry to top level
+    const payload = { tab, ...entry };
+    await fetch(STATE.webhook_url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
     entry.status = 'synced';
     entry.synced_at = new Date().toISOString();
     STATE.last_sync = entry.synced_at;

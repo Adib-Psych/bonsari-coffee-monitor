@@ -1091,6 +1091,7 @@ function mergeApiData(apiResponse) {
       tgl_setor: __formatIdnDate(s.tgl_setor) || (s.tgl_setor || '').slice(0,10),
       tgl_setor_iso: (s.tgl_setor || '').slice(0,10),
       bakalan: s.bakalan || '',
+      grade_input: s.grade_input || '',
       qty_input: +s.qty_input || 0,
       gbp_out: +s.gbp || 0,
       gbc_out: +s.gbc || 0,
@@ -1105,9 +1106,39 @@ function mergeApiData(apiResponse) {
       id: s.id || '',
       batch_status: s.batch_status || ''
     }));
-    // NOTE: D.sortasi_totals tetap pakai baked-in baseline 4 Mei 2026 (locked)
-    // New entries muncul di detail table via D.sortasi_batches, tapi yield aggregates
-    // di-anchor ke baseline 4 Mei untuk konsistensi. Update baseline kalau opname fisik berikutnya dilakukan.
+    // === V7 LIVE YIELD AGGREGATES (single source of truth) ===
+    // Recompute D.sortasi_totals from real-time batches (not baked-in)
+    const T = { qty_input:0, gbp_out:0, gbc_out:0, gbl_out:0, gbs_out:0, susut:0, ongkos:0 };
+    D.sortasi_batches.forEach(b => {
+      T.qty_input += b.qty_input || 0;
+      T.gbp_out   += b.gbp_out   || 0;
+      T.gbc_out   += b.gbc_out   || 0;
+      T.gbl_out   += b.lanang_out|| 0;
+      T.gbs_out   += b.gbs_out   || 0;
+      T.susut     += b.susut     || 0;
+      T.ongkos    += b.ongkos    || 0;
+    });
+    const totalOut = T.gbp_out + T.gbc_out + T.gbl_out + T.gbs_out;
+    D.sortasi_totals = {
+      qty_input: T.qty_input,
+      gbp_out: T.gbp_out, gbc_out: T.gbc_out, gbl_out: T.gbl_out, gbs_out: T.gbs_out,
+      susut: T.susut, ongkos: T.ongkos,
+      yield_gbp_pct: T.qty_input > 0 ? (T.gbp_out / T.qty_input * 100) : 0,
+      yield_gbc_pct: T.qty_input > 0 ? (T.gbc_out / T.qty_input * 100) : 0,
+      yield_gbl_pct: T.qty_input > 0 ? (T.gbl_out / T.qty_input * 100) : 0,
+      yield_gbs_pct: T.qty_input > 0 ? (T.gbs_out / T.qty_input * 100) : 0,
+      susut_pct:     T.qty_input > 0 ? (T.susut / T.qty_input * 100) : 0
+    };
+  }
+  // === V7 GB MOVEMENTS (single source of truth for stock) ===
+  if (data.gb_movements && Array.isArray(data.gb_movements)) {
+    D.gb_movements = data.gb_movements;
+  } else {
+    D.gb_movements = D.gb_movements || [];
+  }
+  // === V7 SUMMARY from API (server-side computed) ===
+  if (data.summary) {
+    D.api_summary = data.summary;
   }
   // Recompute KPIs from fresh entries so header + cards update
   __recomputeKPIs();
@@ -1184,13 +1215,49 @@ function __recomputeKPIs() {
   if (Object.keys(bySupplier).length > 0) {
     D.logbook.aggregates.pembelian_by_supplier = bySupplier;
   }
+  // === V7 STOCK COMPUTATION (single source of truth from GB_Movement) ===
+  // Compute stock per grade per location from movements
+  const movements = D.gb_movements || [];
+  const stockByGradeLoc = {};
+  const stockByGrade = { GBO:0, GBP:0, GBC:0, GBL:0, GBS:0 };
+  let totalGB = 0;
+  let gbDiPekerjaTotal = 0;
+  const gbDiPekerjaPerWorker = {};
+  movements.forEach(m => {
+    const grade = (m.grade || '').toUpperCase();
+    const lokasi = (m.lokasi || '').toString();
+    const qty = parseFloat(m.qty_signed) || 0;
+    if (!stockByGradeLoc[grade]) stockByGradeLoc[grade] = {};
+    stockByGradeLoc[grade][lokasi] = (stockByGradeLoc[grade][lokasi] || 0) + qty;
+    if (stockByGrade[grade] !== undefined) stockByGrade[grade] += qty;
+    if (lokasi !== 'rb_form') totalGB += qty;
+    if (lokasi.indexOf('di_pekerja:') === 0) {
+      const w = lokasi.replace('di_pekerja:', '');
+      gbDiPekerjaPerWorker[w] = (gbDiPekerjaPerWorker[w] || 0) + qty;
+      gbDiPekerjaTotal += qty;
+    }
+  });
+  // Fallback: if no movements yet, use baseline 313.97
+  if (movements.length === 0) {
+    stockByGrade.GBO = 169.50; stockByGrade.GBP = 37.44; stockByGrade.GBC = 7.41;
+    stockByGrade.GBL = 47.69; stockByGrade.GBS = 28.84;
+    totalGB = 305.88 + 15.00; // includes Sortir Out 15 KG
+    gbDiPekerjaTotal = 15.00;
+  }
+  D.stock_per_grade_live = stockByGrade;
+  D.stock_per_grade_loc = stockByGradeLoc;
+  D.stock_total_live = totalGB;
+  D.gb_di_pekerja = gbDiPekerjaTotal;
+  D.gb_di_pekerja_per_worker = gbDiPekerjaPerWorker;
+
   // === Cross-component sync ===
   const MODAL_AWAL = 77750000;
   const AVG_HPP_KG = 68649;
   const DEPRESIASI_7BLN = 801680;
   const PAJAK_UMKM_RATE = 0.005;
   const pengeluaranOperasi = D.kpi.total_exp - MODAL_AWAL;
-  const stockKg = D.logbook.aggregates.stock_now || 0;
+  // V7: stockKg = live computed from movements (single source of truth)
+  const stockKg = totalGB;
   const stockValue = stockKg * AVG_HPP_KG;
   // 1. Cash Position
   if (!D.cash_position) D.cash_position = {};
@@ -1198,26 +1265,18 @@ function __recomputeKPIs() {
   D.cash_position.sales = D.kpi.total_sales;
   D.cash_position.peng_total = D.kpi.total_exp;
   D.cash_position.peng_riil = pengeluaranOperasi;
-  // Stok Tertahan pakai baked-in opname 5 Mei (313.97 KG) untuk konsistensi cash position
-  // stockKg live disimpan terpisah sbg referensi diagnostic
-  D.cash_position.stock_kg_live_diagnostic = stockKg;
-  D.cash_position.stock_kg = D.meta.stock_calc_kg || 314;
+  D.cash_position.stock_kg = stockKg;
   D.cash_position.avg_hpp = AVG_HPP_KG;
-  D.cash_position.stock_value_live_diagnostic = stockValue;
-  D.cash_position.stock_value = (D.cash_position.stock_kg) * AVG_HPP_KG;
+  D.cash_position.stock_value = stockValue;
   // Saldo Rekening Expected = Total Sales − Pengeluaran Operasi − Stok Tertahan
   // (cash LIKUID di bank, exclude inventory value yang belum terjual)
-  // Saldo Rekening pakai stock_value baked-in (consistent dengan opname)
-  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi - D.cash_position.stock_value;
+  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi - stockValue;
   // Saldo Formal Total = Saldo Rekening + Stok Tertahan (total wealth)
   // Equivalent: Modal Awal + Sales − Total Pengeluaran (incl modal)
   D.cash_position.saldo_formal = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp;
-  // 2. Header KPI Stock GB Akhir
+  // 2. Header KPI Stock GB Akhir — V7 LIVE
   if (!D.meta) D.meta = {};
-  // STOCK GB AKHIR di header pakai HERO baked-in (opname 5 Mei 2026 = 313.97 KG)
-  // Live computed (stockKg) di-store sbg D.meta.stock_live_diagnostic untuk referensi internal.
-  D.meta.stock_live_diagnostic = Math.round(stockKg);
-  // D.meta.stock_calc_kg dibiarkan baked-in (313.97/314 KG opname authoritative)
+  D.meta.stock_calc_kg = stockKg; // LIVE from movements (no longer baked-in)
   // 3. Accounting P&L
   if (!D.accounting) D.accounting = {};
   if (!D.accounting.pl) D.accounting.pl = {};
@@ -1257,13 +1316,14 @@ function __recomputeKPIs() {
   D.accounting.reclass_totals.period_opex = opexPeriod;
 
   // === SORTASI WORKER PAYMENT TRACKING (live) ===
+  // V7: gb_di_pekerja already computed above from movements (single source).
+  // Worker stats here only tracks PAYMENT side (ongkos paid/unpaid).
   const ONGKOS_RATE = 3000;
   const sortasiBatches = (window.__bonsariCachedData?.data?.sortasi || D.sortasi_batches || []);
   const workerStats = {};
-  let totalGbDiPekerja = 0;
   sortasiBatches.forEach(s => {
     // Normalize pekerja name: strip parenthetical adjustment notes
-    let w = (s.pekerja || s.worker || 'Unknown').trim();
+    let w = (s.pekerja || s.worker || 'Unknown').toString().trim();
     w = w.replace(/\s*\([^)]*\)\s*$/, '').trim();
     if (!workerStats[w]) {
       workerStats[w] = { pekerja: w, total_batch: 0, total_input_kg: 0, total_setor_kg: 0,
@@ -1287,51 +1347,27 @@ function __recomputeKPIs() {
     const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
     if (isPaid) { ws.total_paid += ongkos; ws.paid_batch++; }
     else { ws.outstanding += ongkos; ws.unpaid_batch++; }
-    const hasNotSetor = !s.tgl_setor || !s.total_setor || +s.total_setor === 0;
-    if (hasNotSetor && +s.qty_input > 0) {
+    // V7: pending_kg now from gb_di_pekerja_per_worker (movement-based, more accurate)
+    const isKirimUnreturned = (s.batch_status === 'kirim') ||
+                              (!s.tgl_setor || !s.total_setor || +s.total_setor === 0);
+    if (isKirimUnreturned && +s.qty_input > 0) {
       ws.pending_batch++;
-      ws.pending_kg += +s.qty_input;
-      totalGbDiPekerja += +s.qty_input;
+      ws.pending_kg = D.gb_di_pekerja_per_worker?.[w] || ws.pending_kg + (+s.qty_input);
     }
   });
   Object.values(workerStats).forEach(ws => {
     ws.avg_yield = ws.total_input_kg > 0 ? (ws.total_setor_kg / ws.total_input_kg * 100) : 0;
+    // Override pending_kg from movement-based computation if available
+    const fromMv = D.gb_di_pekerja_per_worker?.[ws.pekerja];
+    if (fromMv !== undefined) ws.pending_kg = fromMv;
   });
   D.worker_stats = workerStats;
-  D.gb_di_pekerja = totalGbDiPekerja;
+  // D.gb_di_pekerja already set from movements above (V7 single source)
   D.total_outstanding_ongkos = Object.values(workerStats).reduce((a,w) => a + w.outstanding, 0);
   D.total_paid_ongkos = Object.values(workerStats).reduce((a,w) => a + w.total_paid, 0);
-
-  // === LIVE STOCK PER GRADE (computed from sortasi flow) ===
-  const stockGrade = { GBO: 0, GBP: 0, GBC: 0, GBL: 0, GBS: 0 };
-  stockGrade.GBO = (D.logbook?.aggregates?.total_pembelian_kg || 0);
-  sortasiBatches.forEach(s => {
-    stockGrade.GBO -= +s.qty_input || 0;
-    stockGrade.GBP += +s.gbp || 0;
-    stockGrade.GBC += +s.gbc || 0;
-    stockGrade.GBL += +s.gbl || 0;
-    stockGrade.GBS += +s.gbs || 0;
-  });
-  (D.penjualan_gb || []).forEach(r => {
-    const kode = (r.kode || '').toUpperCase();
-    if (stockGrade[kode] !== undefined) stockGrade[kode] -= +r.qty || 0;
-  });
-  // Roasting consumes from CORRECT grade per HPP locked:
-  // RBP/RBC/RBL → GBP, GCR → GBS, GCP → GBO (all use 1.25× yield ratio)
-  (D.penjualan_rb || []).forEach(r => {
-    const consumed = (+r.qty || 0) * 1.25;
-    const kode = (r.kode || '').toUpperCase();
-    if (kode === 'GCR') stockGrade.GBS -= consumed;
-    else if (kode === 'GCP') stockGrade.GBO -= consumed;
-    else stockGrade.GBP -= consumed; // RBP, RBC, RBL
-  });
-  // Pre-packed carve-out: R&D Wakaf 56 KG + Jago Ireng 5 KG = 61 KG
-  // These are physical stock di lokasi terpisah (tidak di-sales/tidak di-roast)
-  // Per baseline 4 Mei 2026 documentation
-  D.stock_per_grade_live = stockGrade;
+  // Carve-out (informational only, NOT included in live stock — already in baseline)
   D.stock_carve_out = { 'R&D Wakaf': 56, 'Jago Ireng': 5 };
   D.stock_carve_out_total = 61;
-  D.stock_total_live = Math.max(0, Object.values(stockGrade).reduce((a,b)=>a+b,0)) + D.stock_carve_out_total;
 }
 
 async function refreshFromAPI() {
@@ -3074,48 +3110,90 @@ if(LB){
   document.getElementById('lb-tipe').onchange = renderMovements;
   renderMovements();
   
-  // Section C HERO: Stock per Grade — visual cards
-  const SH = LB.stock_hero;
-  if(SH){
-    // Top KPI summary
-    document.getElementById('lb-hero-asof').textContent = 'Per ' + SH.as_of_date + ' · ' + SH.total_kg + ' KG · Verified';
-    document.getElementById('lb-hero-total').innerHTML = fmtN(SH.total_kg,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
-    document.getElementById('lb-hero-total-sub').textContent = SH.verification_note;
-    
-    const gboGrade = SH.grades.find(g=>g.code==='GBO');
-    const sortedGrades = SH.grades.filter(g=>['GBP','GBL','GBS','Bakalan GBP+GBC'].includes(g.code));
-    const sortedKg = sortedGrades.reduce((a,g)=>a+g.kg, 0);
-    
-    document.getElementById('lb-hero-gbo').innerHTML = fmtN(gboGrade.kg,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
-    document.getElementById('lb-hero-sorted').innerHTML = fmtN(sortedKg,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
-    document.getElementById('lb-hero-value').innerHTML = '<span style="font-size:13px;color:var(--muted)">Rp</span> ' + fmtN(SH.total_value_rp,0);
-    
-    // Grade cards
-    const gridEl = document.getElementById('lb-hero-grade-grid');
-    gridEl.innerHTML = SH.grades.map(g=>{
-      const flowColor = g.flow_type==='sortir_input'?'#B85C5C':(g.flow_type==='sortir_output'?'#5B9279':(g.flow_type==='in_progress'?'#E8975A':'#888'));
-      const valDisplay = g.value_rp ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">Value: Rp '+fmtN(g.value_rp,0)+'</div>' : '<div style="font-size:11px;color:var(--muted);margin-top:6px">&nbsp;</div>';
-      return `<div style="background:${g.bg};border:2px solid ${g.color};border-radius:10px;padding:14px;position:relative">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <div>
-            <div style="font-size:24px;line-height:1">${g.icon}</div>
-            <div style="font-weight:700;font-size:14px;color:${g.color};margin-top:4px">${g.code}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.name}</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:22px;font-weight:700;color:${g.color}">${fmtN(g.kg,2)}</div>
-            <div style="font-size:11px;color:var(--muted)">KG · ${g.pct}%</div>
-          </div>
-        </div>
-        <div style="font-size:11px;color:#444;line-height:1.4;border-top:1px dashed ${g.color}40;padding-top:6px;margin-top:6px">
-          <strong style="color:${g.color}">${g.subtitle}</strong><br/>
-          <span style="color:var(--muted);font-size:10.5px">${g.components}</span>
-        </div>
-        <div style="font-size:11px;color:${flowColor};font-weight:600;margin-top:8px;padding:4px 8px;background:white;border-radius:4px;border:1px solid ${flowColor}40">${g.flow}</div>
-        ${valDisplay}
-      </div>`;
-    }).join('');
+  // === V7 LIVE HERO Stock per Grade — computed from GB_Movement (single source) ===
+  const SH = LB.stock_hero; // baseline metadata (icons, colors, descriptions)
+  const liveStock = D.stock_per_grade_live || {};
+  const liveTotal = D.stock_total_live || 0;
+  const gbDiPekerja = D.gb_di_pekerja || 0;
+  const gradeMeta = (SH && SH.grades) ? SH.grades : [];
+  // Map of grade code → meta for color/icon/subtitle
+  const metaByCode = {};
+  gradeMeta.forEach(g => { metaByCode[g.code] = g; });
+  // Build live grades array (5 main grades + sortir_out)
+  const liveGrades = ['GBO','GBP','GBC','GBL','GBS'].map(code => {
+    const meta = metaByCode[code] || {};
+    const kg = liveStock[code] || 0;
+    const pct = liveTotal > 0 ? (kg / liveTotal * 100) : 0;
+    const hppKg = meta.hpp_per_kg || null;
+    return {
+      code: code,
+      name: meta.name || code,
+      subtitle: meta.subtitle || '',
+      kg: kg,
+      pct: pct.toFixed(1),
+      icon: meta.icon || '📦',
+      color: meta.color || '#1B2A41',
+      bg: meta.bg || '#F5F7FA',
+      components: meta.components || ('Live · grade ' + code),
+      flow: meta.flow || '↕️ live update dari movements',
+      flow_type: meta.flow_type || 'live',
+      value_rp: hppKg ? Math.round(kg * hppKg) : null
+    };
+  });
+  // Add Sortir Out card if any GB di pekerja
+  if (gbDiPekerja > 0) {
+    liveGrades.push({
+      code: 'Sortir Out',
+      name: 'Sedang di Sortir',
+      subtitle: 'Di tempat pekerja (live)',
+      kg: gbDiPekerja,
+      pct: liveTotal > 0 ? (gbDiPekerja / liveTotal * 100).toFixed(1) : '0',
+      icon: '⏳',
+      color: '#E8975A',
+      bg: '#FCE5D2',
+      components: Object.entries(D.gb_di_pekerja_per_worker || {})
+        .map(([w,kg]) => w + ' ' + kg.toFixed(1) + ' KG').join(' · ') || 'Live tracking',
+      flow: '← akan kembali sebagai mix grade output',
+      flow_type: 'in_progress',
+      value_rp: null
+    });
   }
+  // Top KPI summary — LIVE
+  const totalValue = liveGrades.reduce((s,g) => s + (g.value_rp || 0), 0);
+  const asOfDate = new Date().toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' });
+  document.getElementById('lb-hero-asof').textContent = 'Live · ' + fmtN(liveTotal,2) + ' KG · Per ' + asOfDate;
+  document.getElementById('lb-hero-total').innerHTML = fmtN(liveTotal,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
+  document.getElementById('lb-hero-total-sub').textContent = 'Live computed from ' + (D.gb_movements||[]).length + ' movements (baseline 5 Mei + delta sortasi/sales/pembelian)';
+  const gboKg = liveStock.GBO || 0;
+  const sortedKg = (liveStock.GBP || 0) + (liveStock.GBC || 0) + (liveStock.GBL || 0) + (liveStock.GBS || 0);
+  document.getElementById('lb-hero-gbo').innerHTML = fmtN(gboKg,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
+  document.getElementById('lb-hero-sorted').innerHTML = fmtN(sortedKg,1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>';
+  document.getElementById('lb-hero-value').innerHTML = '<span style="font-size:13px;color:var(--muted)">Rp</span> ' + fmtN(totalValue,0);
+  // Grade cards — LIVE
+  const gridEl = document.getElementById('lb-hero-grade-grid');
+  gridEl.innerHTML = liveGrades.map(g=>{
+    const flowColor = g.flow_type==='sortir_input'?'#B85C5C':(g.flow_type==='sortir_output'?'#5B9279':(g.flow_type==='in_progress'?'#E8975A':'#888'));
+    const valDisplay = g.value_rp ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">Value: Rp '+fmtN(g.value_rp,0)+'</div>' : '<div style="font-size:11px;color:var(--muted);margin-top:6px">&nbsp;</div>';
+    return `<div style="background:${g.bg};border:2px solid ${g.color};border-radius:10px;padding:14px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <div style="font-size:24px;line-height:1">${g.icon}</div>
+          <div style="font-weight:700;font-size:14px;color:${g.color};margin-top:4px">${g.code}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.name}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:700;color:${g.color}">${fmtN(g.kg,2)}</div>
+          <div style="font-size:11px;color:var(--muted)">KG · ${g.pct}%</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#444;line-height:1.4;border-top:1px dashed ${g.color}40;padding-top:6px;margin-top:6px">
+        <strong style="color:${g.color}">${g.subtitle}</strong><br/>
+        <span style="color:var(--muted);font-size:10.5px">${g.components}</span>
+      </div>
+      <div style="font-size:11px;color:${flowColor};font-weight:600;margin-top:8px;padding:4px 8px;background:white;border-radius:4px;border:1px solid ${flowColor}40">${g.flow}</div>
+      ${valDisplay}
+    </div>`;
+  }).join('');
   
   // Section C: Notes
   const notesContainer = document.getElementById('lb-notes-content');
