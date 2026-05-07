@@ -592,8 +592,7 @@ footer a{color:var(--steel);text-decoration:none}
       <tbody id="pl-table"></tbody>
     </table>
     <div class="note" style="margin-top:14px">
-      <strong>Insight:</strong> Bonsari Coffee <strong>untung Rp 13,93 jt</strong> di periode 7 bulan operasi — bukan rugi! Saldo kas terlihat defisit hanya karena Rp 81,28 jt modal masih "tertahan" sebagai inventory GB (333 KG senilai ~Rp 23 jt) + alat (Rp 3,3 jt aset tetap).<br>
-      <strong>Net margin 17,6%</strong> setelah deduct OpEx period (branding, kemasan retail) dan depresiasi alat 7 bulan.
+      <strong>Insight:</strong> <span id="pl-insight-text">Loading…</span>
     </div>
   </div>
 
@@ -1724,13 +1723,131 @@ const plHtml = `
 `;
 document.getElementById('pl-table').innerHTML = plHtml;
 
+// === DYNAMIC P&L INSIGHT TEXT ===
+(function(){
+  const fmt = n => 'Rp ' + (n/1e6).toFixed(2).replace('.',',') + ' jt';
+  const sales = P.sales || 0;
+  const np = P.net_profit || 0;
+  const margin = sales > 0 ? (np/sales*100).toFixed(1).replace('.',',') : '0';
+  const stockKg = (D.logbook?.aggregates?.stock_now || 0).toFixed(0);
+  const stockVal = D.cash_position?.stock_value || 0;
+  const fixedNet = A.neraca?.fixed_asset_net || 0;
+  const monthsOperasi = 7;
+  const status = np > 0 ? 'untung' : 'rugi';
+  const verb = np > 0 ? 'bukan rugi!' : '— periode ini perlu evaluasi';
+  const txt = 'Bonsari Coffee <strong>'+status+' '+fmt(Math.abs(np))+'</strong> di periode '+monthsOperasi+' bulan operasi '+verb+' Saldo kas terlihat tipis hanya karena modal masih "tertahan" sebagai inventory GB ('+stockKg+' KG senilai '+fmt(stockVal)+') + aset tetap ('+fmt(fixedNet)+').<br><strong>Net margin '+margin+'%</strong> setelah deduct OpEx period dan depresiasi alat '+monthsOperasi+' bulan.';
+  const el = document.getElementById('pl-insight-text');
+  if (el) el.innerHTML = txt;
+})();
+
+// === ADAPTIVE INSIGHT GENERATOR ===
+// Thresholds — bisa di-edit nanti
+const INSIGHT_THRESHOLDS = {
+  marginSehat: 20,           // % — margin healthy threshold
+  marginTipis: 12,           // % — margin warning
+  bepDekat: 70,              // % — BEP near
+  bepTercapai: 100,          // % — BEP achieved
+  inventoryTinggi: 30,       // % of modal — inventory ratio warning
+  inventoryRendah: 5,        // % of modal — too little stock
+  customerConcentration: 70  // % top-2 customers
+};
+
+function generateAccountingInsights(pl, dataObj, accountObj) {
+  const out = [];
+  const sales = pl.sales || 0;
+  const np = pl.net_profit || 0;
+  const margin = sales > 0 ? (np / sales * 100) : 0;
+  const modal = 77750000;
+  const bepPct = (np / modal * 100);
+  const monthsOperasi = 7;
+  const annualROI = bepPct * 12 / monthsOperasi;
+  const stockKg = dataObj.logbook?.aggregates?.stock_now || 0;
+  const stockValue = dataObj.cash_position?.stock_value || 0;
+  const inventoryRatio = (stockValue / modal * 100);
+  const totalKgMasuk = dataObj.logbook?.aggregates?.total_pembelian_kg || 1;
+  const totalKgKeluar = dataObj.logbook?.aggregates?.total_kg_keluar || 1;
+  const turnoverMonths = stockKg / (totalKgKeluar / monthsOperasi || 1);
+  const cashLiquid = dataObj.cash_position?.cash_liquid || 0;
+  const T = INSIGHT_THRESHOLDS;
+  const fmt = n => 'Rp ' + (n/1e6).toFixed(2).replace('.',',') + ' jt';
+
+  // 1️⃣ PROFIT/LOSS STATUS
+  if (np > 0) {
+    if (bepPct >= T.bepTercapai) {
+      out.push({icon:'🎉', title:'BEP TERCAPAI!', body:'Modal awal Rp 77,75 jt sudah pulih. Net Profit Rp '+fmt(np)+' = <strong>'+bepPct.toFixed(1)+'% ROI</strong> dalam '+monthsOperasi+' bulan ('+annualROI.toFixed(1)+'%/tahun annualized). Sekarang fase profit murni — pertahankan strategi.', color:'#5B9279'});
+    } else if (bepPct >= T.bepDekat) {
+      out.push({icon:'🚀', title:'Hampir BEP — gaspol!', body:'Net Profit Rp '+fmt(np)+' (margin '+margin.toFixed(1)+'%). BEP progress <strong>'+bepPct.toFixed(1)+'%</strong> — tinggal sedikit lagi balik modal. Fokus tingkatkan volume sales atau margin.', color:'#3A6EA5'});
+    } else {
+      out.push({icon:'✅', title:'Bisnis untung, bukan rugi', body:'Net Profit akrual: <strong>'+fmt(np)+' (margin '+margin.toFixed(1)+'%)</strong>. Cash terlihat tipis bukan karena rugi — Rp 81,28 jt modal masih jadi inventory + alat. BEP progress '+bepPct.toFixed(1)+'% — masih perjalanan menuju balik modal.', color:'#5B9279'});
+    }
+  } else {
+    out.push({icon:'⚠️', title:'PERHATIAN: Periode ini rugi', body:'Net Profit <strong>'+fmt(np)+'</strong> (margin '+margin.toFixed(1)+'%). Review urgent: (1) HPP per produk vs harga jual, (2) volume sales drop?, (3) ada OpEx baru yang spike?', color:'#B85C5C'});
+  }
+
+  // 2️⃣ MARGIN HEALTH
+  if (margin >= T.marginSehat) {
+    out.push({icon:'💚', title:'Margin sehat', body:'Margin '+margin.toFixed(1)+'% di atas threshold sehat ('+T.marginSehat+'%). Pricing strategy current efektif. Hindari diskon agresif yang bisa erode margin.', color:'#5B9279'});
+  } else if (margin < T.marginTipis && margin > 0) {
+    out.push({icon:'📉', title:'Margin tipis — perlu review', body:'Margin '+margin.toFixed(1)+'% di bawah threshold sehat ('+T.marginTipis+'%). Cek: harga jual sudah cover HPP locked? Ada supplier negotiation possible?', color:'#E8975A'});
+  } else if (margin >= T.marginTipis && margin < T.marginSehat) {
+    out.push({icon:'📊', title:'Margin moderate', body:'Margin '+margin.toFixed(1)+'% antara '+T.marginTipis+'-'+T.marginSehat+'%. Acceptable tapi ada room to improve. Coba premium positioning untuk customer reseller.', color:'#3A6EA5'});
+  }
+
+  // 3️⃣ INVENTORY HEALTH
+  if (inventoryRatio > T.inventoryTinggi) {
+    out.push({icon:'📦', title:'Inventory terlalu banyak nyangkut', body:'Stock '+stockKg.toFixed(0)+' KG ('+fmt(stockValue)+') = <strong>'+inventoryRatio.toFixed(0)+'%</strong> dari modal. Threshold sehat '+T.inventoryTinggi+'%. Estimasi habis: ~'+turnoverMonths.toFixed(1)+' bulan lagi. Pertimbangkan: (1) accelerate sales, (2) jangan beli baru dulu.', color:'#E8975A'});
+  } else if (inventoryRatio < T.inventoryRendah) {
+    out.push({icon:'🚨', title:'Stock GB hampir habis', body:'Stock cuma '+stockKg.toFixed(0)+' KG ('+inventoryRatio.toFixed(1)+'% modal). Risk stockout — segera planning pembelian. Estimasi habis ~'+turnoverMonths.toFixed(1)+' bulan.', color:'#B85C5C'});
+  } else {
+    out.push({icon:'📦', title:'Inventory level wajar', body:'Stock '+stockKg.toFixed(0)+' KG ('+inventoryRatio.toFixed(0)+'% modal). Estimasi turnover '+turnoverMonths.toFixed(1)+' bulan dengan kecepatan sales current. Healthy zone — beli new stock saat sisa <50%.', color:'#5B9279'});
+  }
+
+  // 4️⃣ ROI ANNUALIZED
+  if (annualROI > 0) {
+    let roiCommentary = '';
+    if (annualROI >= 30) roiCommentary = '<strong>Excellent ROI</strong> — di atas deposito (~5%) dan saham average (~10-15%). Bisnis F&B yang sehat.';
+    else if (annualROI >= 15) roiCommentary = '<strong>Good ROI</strong> — di atas deposito, kompetitif vs investasi pasif.';
+    else if (annualROI >= 5) roiCommentary = '<strong>Modest ROI</strong> — sekedar di atas deposito. Perlu strategi tingkatkan margin atau volume.';
+    else roiCommentary = '<strong>Below benchmark</strong> — ROI di bawah deposito. Perlu review business model.';
+    out.push({icon:'📈', title:'ROI annualized: '+annualROI.toFixed(1)+'%', body:'Net Profit '+fmt(np)+' / Modal '+fmt(modal)+' = '+bepPct.toFixed(1)+'% dalam '+monthsOperasi+' bulan = <strong>'+annualROI.toFixed(1)+'%/tahun</strong>. '+roiCommentary, color:'#3A6EA5'});
+  }
+
+  // 5️⃣ CASH LIQUIDITY  
+  const monthlyExpAvg = (dataObj.kpi.total_exp - modal) / monthsOperasi;
+  const monthsCashRunway = monthlyExpAvg > 0 ? (cashLiquid / monthlyExpAvg) : 99;
+  if (monthsCashRunway < 1) {
+    out.push({icon:'💸', title:'Cash runway pendek!', body:'Saldo Rekening '+fmt(cashLiquid)+' cuma cukup buat ~'+monthsCashRunway.toFixed(1)+' bulan operasi (avg expense Rp '+fmt(monthlyExpAvg)+'/bln). Butuh tambahan modal atau accelerate sales.', color:'#B85C5C'});
+  } else if (monthsCashRunway < 3) {
+    out.push({icon:'⚠️', title:'Cash runway terbatas', body:'Saldo Rekening cukup ~'+monthsCashRunway.toFixed(1)+' bulan operasi. Wajar untuk bisnis kecil tapi tetap pantau ketat.', color:'#E8975A'});
+  } else {
+    out.push({icon:'💰', title:'Cash runway sehat', body:'Saldo Rekening '+fmt(cashLiquid)+' cukup buat ~'+monthsCashRunway.toFixed(1)+' bulan operasi. Bisnis tidak akan kekurangan cash dalam waktu dekat.', color:'#5B9279'});
+  }
+
+  // 6️⃣ CUSTOMER CONCENTRATION (top buyer analysis)
+  if ((dataObj.top_customers || []).length > 0) {
+    const totalCustSales = dataObj.top_customers.reduce((s,c) => s + (c.sales||0), 0);
+    const top2 = dataObj.top_customers.slice(0,2).reduce((s,c) => s + (c.sales||0), 0);
+    const top2Pct = totalCustSales > 0 ? (top2 / totalCustSales * 100) : 0;
+    if (top2Pct > T.customerConcentration) {
+      const top2Names = dataObj.top_customers.slice(0,2).map(c => c.nama).join(' + ');
+      out.push({icon:'🎯', title:'Concentration risk — 2 customer = '+top2Pct.toFixed(0)+'% sales', body:top2Names+' menyumbang <strong>'+top2Pct.toFixed(0)+'%</strong> dari total revenue. Risk: kalau 1 dari mereka stop order, sales drop dramatis. Saran: diversifikasi customer base atau retention program kuat.', color:'#E8975A'});
+    }
+  }
+
+  // 7️⃣ EXPENSE STRUCTURE
+  const expByCat = dataObj.exp_by_kategori || {};
+  const opEx = expByCat['Operasional'] || 0;
+  const opExPct = sales > 0 ? (opEx / sales * 100) : 0;
+  if (opExPct > 15) {
+    out.push({icon:'📋', title:'OpEx Operasional agak tinggi', body:'Pengeluaran Operasional '+fmt(opEx)+' = <strong>'+opExPct.toFixed(1)+'%</strong> dari sales. Threshold sehat <15%. Detail breakdown ada di tab Pengeluaran — review item terbesar.', color:'#E8975A'});
+  }
+
+  return out;
+}
+
 // Insight cards
-const insights = [
-  {icon:'✅', title:'Bisnis untung, bukan rugi', body:'Kas terlihat defisit Rp 18,6 jt karena Rp 81,28 jt modal masih jadi inventory + alat. Net Profit akrual: <strong>+Rp '+fmtN(P.net_profit/1e6,2)+' jt (margin '+(P.net_profit/P.sales*100).toFixed(1)+'%)</strong>.', color:'var(--success)'},
-  {icon:'📦', title:'Inventory turnover', body:'Stock 333 KG ≈ '+(333/971*100).toFixed(0)+'% dari yang sudah terjual (971 KG). Kalau kecepatan jual sama, butuh ~'+(333/(971/7)).toFixed(1)+' bulan lagi untuk habis.', color:'var(--steel)'},
-  {icon:'💰', title:'BEP ulang dengan benar', body:'BEP "23,58%" dari Modal Awal kurang akurat. BEP sebenarnya: Net Profit Rp '+fmtN(P.net_profit/1e6,2)+' jt / Modal Rp 77,75 jt = <strong>'+(P.net_profit/77750000*100).toFixed(1)+'%</strong> ROI dalam 7 bulan = ~'+(P.net_profit/77750000*100*12/7).toFixed(1)+'%/tahun (annualized).', color:'var(--accent)'},
-  {icon:'🎯', title:'Yang perlu diperbaiki di logbook', body:'Ke depan, pisahkan "Pembelian Inventory" (Modal Investment) dari "True Expense" sejak input. Kategori "Investasi Alat" sudah benar, "Pembelian Green Bean" perlu reclassify ke Investment.', color:'var(--navy)'}
-];
+// Rule-based insights yang adaptif sesuai kondisi bisnis live
+const insights = generateAccountingInsights(P, D, A);
 document.getElementById('insight-cards').innerHTML = insights.map(i=>`
   <div style="background:#FAFCFE;border:1px solid var(--border);border-left:4px solid ${i.color};border-radius:8px;padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
