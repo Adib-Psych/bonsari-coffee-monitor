@@ -1054,8 +1054,12 @@ function __recomputeKPIs() {
   D.cash_position.stock_kg = stockKg;
   D.cash_position.avg_hpp = AVG_HPP_KG;
   D.cash_position.stock_value = stockValue;
-  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi;
-  D.cash_position.saldo_formal = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp + stockValue;
+  // Saldo Rekening Expected = Total Sales − Pengeluaran Operasi − Stok Tertahan
+  // (cash LIKUID di bank, exclude inventory value yang belum terjual)
+  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi - stockValue;
+  // Saldo Formal Total = Saldo Rekening + Stok Tertahan (total wealth)
+  // Equivalent: Modal Awal + Sales − Total Pengeluaran (incl modal)
+  D.cash_position.saldo_formal = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp;
   // 2. Header KPI Stock GB Akhir
   if (!D.meta) D.meta = {};
   D.meta.stock_calc_kg = Math.round(stockKg);
