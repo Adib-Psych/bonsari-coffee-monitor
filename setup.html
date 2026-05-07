@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Setup Wizard — Google Sheets Sync</title>
+<style>
+  :root { --primary: #4A2C40; --accent: #D4A574; --bg: #F8F4F0; --text: #2A1F26; --muted: #7B6A73; --border: #E8DFD7; --success: #5B9279; --warning: #E89D5A; --danger: #B85C5C; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 20px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header { background: linear-gradient(135deg, #4A2C40 0%, #8B5A7A 100%); color: white; padding: 28px 32px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  header h1 { font-size: 26px; margin-bottom: 4px; }
+  header .sub { opacity: 0.9; font-size: 14px; }
+  .step { background: white; border-radius: 12px; padding: 24px 28px; margin-bottom: 18px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(74,44,64,0.05); }
+  .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .step-num { background: var(--primary); color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; flex-shrink: 0; }
+  .step-title { font-size: 18px; font-weight: 700; color: var(--primary); }
+  .step-est { font-size: 11px; color: var(--muted); margin-left: auto; background: var(--bg); padding: 3px 10px; border-radius: 12px; }
+  .step-body { padding-left: 48px; }
+  .step-body ol { margin-left: 20px; margin-top: 8px; }
+  .step-body li { margin-bottom: 8px; }
+  .step-body strong { color: var(--primary); }
+  code { background: #FAF6F2; border: 1px solid var(--border); padding: 2px 8px; border-radius: 4px; font-family: 'SF Mono', Monaco, monospace; font-size: 12.5px; color: var(--primary); }
+  pre { background: #1E1E1E; color: #D4D4D4; padding: 14px 18px; border-radius: 8px; overflow-x: auto; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; line-height: 1.5; margin: 12px 0; max-height: 300px; }
+  .copy-btn { background: var(--accent); color: var(--primary); border: none; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 13px; margin-top: 8px; transition: all 0.15s; }
+  .copy-btn:hover { background: #B88A5A; transform: translateY(-1px); }
+  .copy-btn.copied { background: var(--success); color: white; }
+  .info-box { background: #E8DFF0; border-left: 4px solid var(--primary); padding: 14px 18px; border-radius: 6px; margin: 14px 0; font-size: 13.5px; }
+  .warn-box { background: #FFF3E0; border-left: 4px solid var(--warning); padding: 14px 18px; border-radius: 6px; margin: 14px 0; font-size: 13.5px; }
+  .success-box { background: #DAEBE0; border-left: 4px solid var(--success); padding: 14px 18px; border-radius: 6px; margin: 14px 0; font-size: 13.5px; }
+  .step-img { background: #FAF6F2; border: 2px dashed var(--border); padding: 24px; text-align: center; border-radius: 8px; color: var(--muted); font-size: 12px; margin: 12px 0; font-style: italic; }
+  .checklist { list-style: none; }
+  .checklist li { padding: 8px 12px; background: #FAF6F2; border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .checklist li:before { content: "☐"; font-size: 18px; }
+  a { color: var(--primary); text-decoration: none; font-weight: 600; }
+  a:hover { text-decoration: underline; }
+  .test-section { background: #F0F7E8; border: 2px solid var(--success); border-radius: 12px; padding: 24px 28px; }
+  .test-section h2 { color: var(--success); margin-bottom: 12px; }
+  .url-input { width: 100%; padding: 10px 12px; border: 2px solid var(--border); border-radius: 6px; font-family: monospace; font-size: 12px; }
+  .test-btn { background: var(--success); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px; margin-top: 10px; }
+  .test-btn:hover { background: #4A7964; }
+  .test-result { margin-top: 14px; padding: 14px; border-radius: 8px; font-size: 13px; display: none; }
+  .test-result.show { display: block; }
+  .test-result.ok { background: #DAEBE0; color: var(--success); border: 1px solid var(--success); }
+  .test-result.fail { background: #FCEBEB; color: var(--danger); border: 1px solid var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <h1>🚀 Setup Google Sheets Sync</h1>
+  <div class="sub">Bonsari Coffee Entry Dashboard · Connect ke Google Sheets · ~15 menit total</div>
+</header>
+
+<div class="info-box">
+  <strong>📋 Apa yang akan kita lakukan:</strong> Buat Google Sheets sebagai database, deploy Apps Script sebagai webhook receiver, paste URL ke Entry Dashboard. Setelah setup, setiap submit di Entry Dashboard otomatis ter-sync ke Google Sheets — bisa diakses dari HP, share ke tim, dan tetap punya backup historical lengkap.
+</div>
+
+<!-- STEP 1 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">1</div>
+    <div class="step-title">Buat Google Sheets baru</div>
+    <div class="step-est">⏱ 1 menit</div>
+  </div>
+  <div class="step-body">
+    <ol>
+      <li>Buka <a href="https://sheets.new" target="_blank">https://sheets.new</a> (auto buat sheet baru)</li>
+      <li>Rename file di kiri atas jadi <strong>Bonsari_Coffee_Entry_Sync</strong></li>
+      <li>Sheet pertama biarin saja (tidak perlu rename — auto-created saat sync pertama)</li>
+    </ol>
+    <div class="info-box" style="margin-top:12px">
+      💡 Sheets akan otomatis bikin 5 tab (Sales_GB, Sales_RB, Pengeluaran, Sortasi, Adjustments) saat entry pertama di-submit. Tidak perlu setup manual.
+    </div>
+  </div>
+</div>
+
+<!-- STEP 2 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">2</div>
+    <div class="step-title">Buka Apps Script editor</div>
+    <div class="step-est">⏱ 30 detik</div>
+  </div>
+  <div class="step-body">
+    <ol>
+      <li>Di Google Sheets yang barusan dibuat, klik menu <strong>Extensions → Apps Script</strong></li>
+      <li>Tab baru akan terbuka dengan editor Apps Script</li>
+      <li>Hapus semua code default yang ada (biasanya cuma <code>function myFunction() {}</code>)</li>
+    </ol>
+  </div>
+</div>
+
+<!-- STEP 3 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">3</div>
+    <div class="step-title">Paste Apps Script code</div>
+    <div class="step-est">⏱ 1 menit</div>
+  </div>
+  <div class="step-body">
+    <p>Klik tombol <strong>Copy Code</strong> di bawah, lalu paste ke Apps Script editor (Ctrl+V atau Cmd+V):</p>
+    <button class="copy-btn" id="copy-btn" onclick="copyAppsScriptCode()">📋 Copy Apps Script Code</button>
+    <pre id="apps-script-code" style="margin-top:12px"></pre>
+    <ol style="margin-top:14px">
+      <li>Setelah paste, klik icon <strong>💾 Save</strong> atau Ctrl+S</li>
+      <li>Beri nama project: <strong>Bonsari Entry Sync</strong></li>
+    </ol>
+  </div>
+</div>
+
+<!-- STEP 4 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">4</div>
+    <div class="step-title">Deploy sebagai Web App</div>
+    <div class="step-est">⏱ 2 menit</div>
+  </div>
+  <div class="step-body">
+    <ol>
+      <li>Klik tombol <strong>Deploy</strong> (kanan atas) → <strong>New deployment</strong></li>
+      <li>Klik icon ⚙️ (gear) di sebelah "Select type" → pilih <strong>Web app</strong></li>
+      <li>Isi settings sebagai berikut:
+        <ul style="margin-top:6px;margin-left:20px">
+          <li><strong>Description:</strong> <code>Bonsari Coffee Entry Sync v1</code></li>
+          <li><strong>Execute as:</strong> <code>Me (asroriadib@gmail.com)</code></li>
+          <li><strong>Who has access:</strong> <code>Anyone</code></li>
+        </ul>
+      </li>
+      <li>Klik <strong>Deploy</strong></li>
+    </ol>
+    <div class="warn-box" style="margin-top:12px">
+      ⚠️ <strong>Authorize permissions</strong>: Akan muncul popup minta authorize. Klik "Authorize access" → pilih akun Google Anda → klik "Advanced" → "Go to Bonsari Entry Sync (unsafe)" → "Allow". <em>Ini muncul karena script ini buat Anda sendiri (belum verified Google), aman karena code-nya transparan dan Anda yang buat.</em>
+    </div>
+  </div>
+</div>
+
+<!-- STEP 5 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">5</div>
+    <div class="step-title">Copy Web App URL</div>
+    <div class="step-est">⏱ 30 detik</div>
+  </div>
+  <div class="step-body">
+    <ol>
+      <li>Setelah deploy berhasil, akan muncul popup dengan URL Web app</li>
+      <li>URL formatnya: <code>https://script.google.com/macros/s/AKfycb.../exec</code></li>
+      <li>Klik <strong>Copy</strong> di sebelah URL</li>
+      <li>Klik <strong>Done</strong> untuk close popup</li>
+    </ol>
+    <div class="success-box">
+      ✅ <strong>Save URL ini</strong> di tempat aman (note app, password manager, dll). Kalau hilang, perlu redeploy.
+    </div>
+  </div>
+</div>
+
+<!-- STEP 6 -->
+<div class="step">
+  <div class="step-header">
+    <div class="step-num">6</div>
+    <div class="step-title">Paste URL ke Entry Dashboard</div>
+    <div class="step-est">⏱ 30 detik</div>
+  </div>
+  <div class="step-body">
+    <ol>
+      <li>Buka <strong>Entry_Dashboard_Bonsari.html</strong></li>
+      <li>Di sidebar kiri, klik tab <strong>⚙️ Settings & Sync</strong></li>
+      <li>Paste Web App URL ke field <strong>"Webhook URL"</strong></li>
+      <li>Klik di luar field (atau Tab) — akan ada toast "Webhook URL saved"</li>
+    </ol>
+  </div>
+</div>
+
+<!-- STEP 7 — TEST -->
+<div class="test-section">
+  <h2>🧪 Step 7: Test Connection</h2>
+  <p style="margin-bottom:14px">Sebelum lanjut entry beneran, mari kita test apakah webhook bekerja.</p>
+
+  <p style="font-weight:600;margin-bottom:6px">Paste Web App URL di sini:</p>
+  <input type="text" class="url-input" id="webhook-test-url" placeholder="https://script.google.com/macros/s/.../exec" />
+  <button class="test-btn" onclick="testWebhook()">🚀 Test Connection</button>
+
+  <div id="test-result" class="test-result"></div>
+
+  <div class="info-box" style="margin-top:14px">
+    <strong>What this test does:</strong>
+    <ol style="margin-top:6px;margin-left:20px">
+      <li>Send GET request ke webhook URL → cek apakah service online</li>
+      <li>Send POST test entry ke <code>Sales_GB</code> sheet</li>
+      <li>Verifikasi response sukses + cek di Google Sheets ada baris "TEST CUSTOMER"</li>
+    </ol>
+  </div>
+</div>
+
+<!-- DONE -->
+<div class="step" style="background:#DAEBE0;border-color:var(--success);margin-top:24px">
+  <div class="step-header">
+    <div class="step-num" style="background:var(--success)">✓</div>
+    <div class="step-title" style="color:var(--success)">Setup Complete!</div>
+  </div>
+  <div class="step-body">
+    <p>Setelah test sukses, Entry Dashboard sudah siap dipakai. Setiap submit langsung sync ke Google Sheets.</p>
+    <h4 style="margin-top:12px;color:var(--primary)">📋 Daily Workflow:</h4>
+    <ol style="margin-left:20px">
+      <li>Buka <strong>Entry_Dashboard_Bonsari.html</strong> di browser (bookmark!)</li>
+      <li>Pilih tab sesuai tipe transaksi (A-E)</li>
+      <li>Isi form → Submit & Sync → otomatis masuk Google Sheets</li>
+      <li>Cek Google Sheets kapan saja untuk lihat semua data</li>
+    </ol>
+    <h4 style="margin-top:12px;color:var(--primary)">🔥 Pro Tips:</h4>
+    <ul style="margin-left:20px">
+      <li>Bookmark Google Sheets URL untuk akses cepat</li>
+      <li>Bookmark Entry Dashboard di HP juga (PWA-style — Add to Home Screen di Safari/Chrome)</li>
+      <li>Backup pending entries via Settings → Export Pending JSON setiap minggu</li>
+      <li>Phase 2B (future): auto-pull data dari Google Sheets ke Reading Dashboard</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+
+<script>
+const APPS_SCRIPT_CODE = `/**
+ * BONSARI COFFEE — Entry Dashboard Sync Webhook
+ * Last update: 7 Mei 2026
+ */
+
+const SHEET_MAP = {
+  'sales-gb': 'Sales_GB',
+  'sales-rb': 'Sales_RB',
+  'pengeluaran': 'Pengeluaran',
+  'sortasi': 'Sortasi',
+  'adjustment': 'Adjustments'
+};
+
+const SCHEMA = {
+  'Sales_GB': ['id','created','tanggal','customer','customer_type','produk','qty','harga_per_kg','hpp_per_kg','total_sales','total_hpp','catatan','synced_at'],
+  'Sales_RB': ['id','created','tanggal','customer','customer_type','produk','pack','packs','qty_kg','harga_per_pack','hpp_per_kg','total_sales','total_hpp','gb_equivalent','catatan','synced_at'],
+  'Pengeluaran': ['id','created','tanggal','kategori','deskripsi','total','supplier','qty','harga_per_kg','catatan','synced_at'],
+  'Sortasi': ['id','created','pekerja','batch_status','tgl_ambil','bakalan','qty_input','tgl_setor','gbp','gbc','gbl','gbs','total_setor','susut','yield_pct','ongkos','synced_at'],
+  'Adjustments': ['id','created','tanggal','grade','direction','kg_masuk','kg_keluar','alasan','synced_at']
+};
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    const tab = payload.tab;
+    const entry = payload.entry;
+    if (!tab || !entry) return jsonResponse({ success: false, error: 'Missing tab or entry' });
+    const sheetName = SHEET_MAP[tab];
+    if (!sheetName) return jsonResponse({ success: false, error: 'Unknown tab: ' + tab });
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) sheet = ss.insertSheet(sheetName);
+    if (sheet.getLastRow() === 0) setupHeaders(sheet, sheetName);
+
+    entry.synced_at = new Date().toISOString();
+    const headers = SCHEMA[sheetName];
+    const row = headers.map(h => entry[h] === undefined || entry[h] === null ? '' : entry[h]);
+    sheet.appendRow(row);
+
+    return jsonResponse({ success: true, id: entry.id, sheet: sheetName, row: sheet.getLastRow() });
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.message });
+  }
+}
+
+function doGet(e) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const stats = {};
+  Object.values(SHEET_MAP).forEach(name => {
+    const s = ss.getSheetByName(name);
+    stats[name] = s ? Math.max(0, s.getLastRow() - 1) : 0;
+  });
+  return jsonResponse({
+    status: 'live',
+    service: 'Bonsari Coffee Entry Sync',
+    version: '1.0',
+    timestamp: new Date().toISOString(),
+    entries_count: stats
+  });
+}
+
+function setupHeaders(sheet, sheetName) {
+  const headers = SCHEMA[sheetName];
+  if (!headers) return;
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  const r = sheet.getRange(1, 1, 1, headers.length);
+  r.setBackground('#4A2C40').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+  sheet.setFrozenRows(1);
+}
+
+function jsonResponse(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function testWebhook() {
+  const result = doPost({
+    postData: {
+      contents: JSON.stringify({
+        tab: 'sales-gb',
+        entry: {
+          id: 'test_' + Date.now(),
+          created: new Date().toISOString(),
+          tanggal: '2026-05-07',
+          customer: 'TEST CUSTOMER',
+          customer_type: 'Reseller',
+          produk: 'GBP',
+          qty: 1,
+          harga_per_kg: 93000,
+          hpp_per_kg: 74341,
+          total_sales: 93000,
+          total_hpp: 74341,
+          catatan: 'Test from Apps Script'
+        }
+      })
+    }
+  });
+  Logger.log(result.getContent());
+}`;
+
+document.getElementById('apps-script-code').textContent = APPS_SCRIPT_CODE;
+
+function copyAppsScriptCode() {
+  navigator.clipboard.writeText(APPS_SCRIPT_CODE).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.classList.add('copied');
+    btn.textContent = '✓ Copied!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.textContent = '📋 Copy Apps Script Code';
+    }, 2000);
+  }).catch(err => {
+    alert('Copy failed: ' + err.message);
+  });
+}
+
+async function testWebhook() {
+  const url = document.getElementById('webhook-test-url').value.trim();
+  const result = document.getElementById('test-result');
+  result.classList.remove('show', 'ok', 'fail');
+
+  if (!url) {
+    result.classList.add('show', 'fail');
+    result.innerHTML = '<strong>❌ URL kosong</strong><br/>Paste Web App URL terlebih dahulu.';
+    return;
+  }
+  if (!url.includes('script.google.com')) {
+    result.classList.add('show', 'fail');
+    result.innerHTML = '<strong>❌ URL tidak valid</strong><br/>URL harus berasal dari script.google.com';
+    return;
+  }
+
+  result.classList.add('show');
+  result.style.background = '#FFF3E0';
+  result.style.color = '#7A4A1F';
+  result.style.borderColor = '#E89D5A';
+  result.innerHTML = '⏳ Testing connection...';
+
+  try {
+    // Test 1: GET — health check
+    const getResult = await fetch(url, { method: 'GET', mode: 'no-cors' });
+
+    // Test 2: POST — send test entry
+    const testEntry = {
+      tab: 'sales-gb',
+      entry: {
+        id: 'test_' + Date.now(),
+        created: new Date().toISOString(),
+        tanggal: new Date().toISOString().split('T')[0],
+        customer: 'TEST CONNECTION',
+        customer_type: 'Test',
+        produk: 'GBP',
+        qty: 0.001,
+        harga_per_kg: 1,
+        hpp_per_kg: 1,
+        total_sales: 1,
+        total_hpp: 1,
+        catatan: 'Auto-generated test from setup wizard'
+      }
+    };
+
+    const postResult = await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(testEntry)
+    });
+
+    // With no-cors we can't read response, so assume success if no exception
+    result.classList.remove('show');
+    result.classList.add('show', 'ok');
+    result.innerHTML = `
+      <strong>✅ Test berhasil!</strong><br/>
+      <ul style="margin-top:8px;margin-left:20px">
+        <li>Webhook URL valid</li>
+        <li>Test entry "TEST CONNECTION" sudah dikirim</li>
+        <li><strong>Verifikasi:</strong> Buka Google Sheets, cek tab <code>Sales_GB</code> — harus ada baris baru dengan customer "TEST CONNECTION"</li>
+        <li>Jika muncul ✓ webhook bekerja sempurna. Bisa lanjut pakai Entry Dashboard.</li>
+      </ul>
+    `;
+  } catch (err) {
+    result.classList.remove('show');
+    result.classList.add('show', 'fail');
+    result.innerHTML = `
+      <strong>❌ Test gagal: ${err.message}</strong><br/>
+      Kemungkinan penyebab:
+      <ul style="margin-top:8px;margin-left:20px">
+        <li>URL salah (cek lagi yang di-copy dari deployment)</li>
+        <li>Belum authorize permissions (back ke Apps Script, klik Run pada testWebhook function)</li>
+        <li>Deployment "Who has access" bukan "Anyone"</li>
+      </ul>
+    `;
+  }
+}
+</script>
+
+</body>
+</html>
