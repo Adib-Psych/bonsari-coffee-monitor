@@ -877,6 +877,9 @@ function __translateSalesGB(rows) {
     const harga = +r.harga_per_kg || 0;
     const hpp = +r.hpp_per_kg || 0;
     const qty = +r.qty || 0;
+    const sales = +r.total_sales || (qty * harga);
+    const totalHpp = +r.total_hpp || (qty * hpp);
+    const profit = sales - totalHpp;
     return {
       no: i + 1,
       tanggal: __isoDate(r.tanggal),
@@ -887,8 +890,11 @@ function __translateSalesGB(rows) {
       hpp: hpp,
       harga: harga,
       qty: qty,
-      total_penjualan: +r.total_sales || (qty * harga),
-      total_hpp: +r.total_hpp || (qty * hpp),
+      sales: sales,
+      profit: profit,
+      margin_pct: sales > 0 ? profit / sales : 0,
+      total_penjualan: sales,
+      total_hpp: totalHpp,
       margin: harga - hpp,
       catatan: r.catatan || ''
     };
@@ -902,6 +908,9 @@ function __translateSalesRB(rows) {
     const hargaPack = +r.harga_per_pack || 0;
     const packs = +r.packs || 1;
     const hargaPerKg = qty > 0 ? (hargaPack * packs) / qty : 0;
+    const sales = +r.total_sales || (hargaPack * packs);
+    const totalHpp = +r.total_hpp || (qty * hppKg);
+    const profit = sales - totalHpp;
     return {
       no: i + 1,
       tanggal: __isoDate(r.tanggal),
@@ -914,8 +923,11 @@ function __translateSalesRB(rows) {
       hpp: hppKg,
       harga: hargaPerKg,
       qty: qty,
-      total_penjualan: +r.total_sales || (hargaPack * packs),
-      total_hpp: +r.total_hpp || (qty * hppKg),
+      sales: sales,
+      profit: profit,
+      margin_pct: sales > 0 ? profit / sales : 0,
+      total_penjualan: sales,
+      total_hpp: totalHpp,
       margin: hargaPerKg - hppKg,
       catatan: r.catatan || ''
     };
