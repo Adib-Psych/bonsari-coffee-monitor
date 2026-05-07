@@ -1000,6 +1000,43 @@ function __recomputeKPIs() {
     else catSales['Roast Bean'] += (+r.sales || 0);
   });
   D.cat_sales = catSales;
+  // Logbook aggregates: live recompute from pembelian (Pengeluaran kategori Pembelian Green Bean)
+  const pembelianExp = exp.filter(e => /pembelian.*green.*bean|pembelian.*gb/i.test(e.kategori || ''));
+  const totalPembelianRp = sumField(pembelianExp, 'total');
+  // Try parse qty from desc — fallback: treat as 0 if unparseable
+  let totalPembelianKg = 0;
+  pembelianExp.forEach(e => {
+    const desc = e.deskripsi || '';
+    const qtyMatch = desc.match(/(\d+(?:[.,]\d+)?)\s*KG/i);
+    if (qtyMatch) totalPembelianKg += parseFloat(qtyMatch[1].replace(',','.'));
+  });
+  // Total kg keluar = sales GB qty + (RB qty × 1.25 roast yield)
+  const totalKgKeluar = D.kpi.total_qty_gb + (D.kpi.total_qty_rb * 1.25);
+  // Update D.logbook.aggregates so LogBook tab KPI cards reflect live data
+  if (!D.logbook) D.logbook = {};
+  if (!D.logbook.aggregates) D.logbook.aggregates = {};
+  D.logbook.aggregates.total_pembelian_rp = totalPembelianRp;
+  D.logbook.aggregates.total_pembelian_kg = totalPembelianKg;
+  D.logbook.aggregates.total_kg_keluar = totalKgKeluar;
+  // Stock now = pembelian KG − total KG keluar (estimasi sederhana)
+  D.logbook.aggregates.stock_now = Math.max(0, totalPembelianKg - totalKgKeluar);
+  // Pembelian by supplier — recompute from fresh pembelianExp
+  const bySupplier = {};
+  pembelianExp.forEach(e => {
+    const desc = e.deskripsi || '';
+    const qtyMatch = desc.match(/(\d+(?:[.,]\d+)?)\s*KG/i);
+    const qty = qtyMatch ? parseFloat(qtyMatch[1].replace(',','.')) : 0;
+    // Heuristic: extract supplier from description (after "Pembelian GB" or similar)
+    let supplier = e.supplier || '';
+    if (!supplier) {
+      const sMatch = desc.match(/Pembelian\s+(?:Green\s+Bean|GB)\s+(?:Hasil\s+)?(.+?)(?:\s+\d|\s*$)/i);
+      supplier = sMatch ? sMatch[1].trim().replace(/\(Petani\)/i,'').trim() : 'Unknown';
+    }
+    if (qty > 0) bySupplier[supplier] = (bySupplier[supplier] || 0) + qty;
+  });
+  if (Object.keys(bySupplier).length > 0) {
+    D.logbook.aggregates.pembelian_by_supplier = bySupplier;
+  }
 }
 
 async function refreshFromAPI() {
