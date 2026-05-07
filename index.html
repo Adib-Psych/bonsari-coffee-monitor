@@ -657,12 +657,12 @@ footer a{color:var(--steel);text-decoration:none}
       <div class="kpi success" style="background:#DAEBE0;border:2px solid #5B9279">
         <div class="label" style="color:#2D5640;font-weight:700">📊 Stock Saat Ini</div>
         <div class="value" id="lb-stock-now" style="color:#2D5640;font-size:18px">—</div>
-        <div class="sub">Reconciled vs opname 5 Mei</div>
+        <div class="sub" id="lb-stock-now-sub">Live: Pembelian − Keluar</div>
       </div>
       <div class="kpi" style="background:#F1EFE8;border:2px solid #888780">
         <div class="label" style="color:#444441;font-weight:700">📅 Last Update</div>
-        <div class="value" style="color:#444441;font-size:14px">5 Mei 2026</div>
-        <div class="sub">Reconciled vs Rekon PDF</div>
+        <div class="value" id="lb-last-update" style="color:#444441;font-size:14px">5 Mei 2026</div>
+        <div class="sub" id="lb-last-update-sub">Reconciled vs Rekon PDF</div>
       </div>
     </div>
   </div>
@@ -2203,6 +2203,25 @@ if(LB){
   document.getElementById('lb-total-in').textContent = fmtN(LB.aggregates.total_pembelian_kg,0) + ' KG';
   document.getElementById('lb-total-out').textContent = fmtN(LB.aggregates.total_kg_keluar,1) + ' KG';
   document.getElementById('lb-stock-now').textContent = fmtN(LB.aggregates.stock_now,0) + ' KG';
+  // Live update label shows opname baseline reconciliation if available
+  if (typeof LB.aggregates.last_saldo_running === 'number') {
+    const opnameKg = LB.aggregates.last_saldo_running;
+    const liveKg = LB.aggregates.stock_now;
+    const diff = liveKg - opnameKg;
+    const sign = diff >= 0 ? '+' : '';
+    document.getElementById('lb-stock-now-sub').textContent = 'vs Opname ' + fmtN(opnameKg,1) + ' KG (' + sign + fmtN(diff,1) + ')';
+  }
+  // Last update from API timestamp if available
+  if (window.__bonsariCachedData && window.__bonsariCachedData.timestamp) {
+    const ts = new Date(window.__bonsariCachedData.timestamp);
+    const lastEl = document.getElementById('lb-last-update');
+    if (lastEl) {
+      const m = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+      lastEl.textContent = ts.getDate() + ' ' + m[ts.getMonth()] + ' ' + ts.getFullYear();
+      const sub = document.getElementById('lb-last-update-sub');
+      if (sub) sub.textContent = 'Live sync ' + String(ts.getHours()).padStart(2,'0') + ':' + String(ts.getMinutes()).padStart(2,'0');
+    }
+  }
   
   // Pie chart: Pembelian by supplier
   const supplierData = Object.entries(LB.aggregates.pembelian_by_supplier);
