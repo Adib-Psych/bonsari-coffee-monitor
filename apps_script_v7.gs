@@ -84,6 +84,9 @@ function doGet(e) {
     if (!ss.getSheetByName(SHEETS.GB_MOVEMENT)) {
       setupBaseline();
     }
+    // Migrate existing Sortasi rows (idempotent — skips already-migrated batches)
+    // Called on every doGet but cheap due to ref_id duplicate-check
+    migrateExistingSortasi();
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
