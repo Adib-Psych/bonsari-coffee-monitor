@@ -1239,7 +1239,9 @@ function __recomputeKPIs() {
   const workerStats = {};
   let totalGbDiPekerja = 0;
   sortasiBatches.forEach(s => {
-    const w = s.pekerja || s.worker || 'Unknown';
+    // Normalize pekerja name: strip parenthetical adjustment notes
+    let w = (s.pekerja || s.worker || 'Unknown').trim();
+    w = w.replace(/\s*\([^)]*\)\s*$/, '').trim();
     if (!workerStats[w]) {
       workerStats[w] = { pekerja: w, total_batch: 0, total_input_kg: 0, total_setor_kg: 0,
         total_ongkos: 0, total_paid: 0, outstanding: 0, pending_batch: 0, pending_kg: 0,
