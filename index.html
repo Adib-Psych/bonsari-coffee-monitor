@@ -255,10 +255,10 @@ footer a{color:var(--steel);text-decoration:none}
         <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:var(--steel);font-weight:700;margin-bottom:10px">📐 Cara Hitung Saldo Rekening BSI Bonsari</h3>
         <table style="font-size:13px">
           <tbody>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Total Hasil Penjualan</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> 79.246.000</td></tr>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Pengeluaran Operasi (post-modal)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> 14.829.097</td></tr>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Stok Tertahan (329 KG inventory)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> 22.585.521</td></tr>
-            <tr style="background:#DAEBE0"><td style="padding:9px 10px;font-weight:700;color:#2D5640">= Saldo Rekening Expected</td><td class="num" style="padding:9px 10px;font-weight:700;color:#2D5640;font-family:monospace"><span style="font-size:11px">Rp</span> 41.831.382</td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Total Hasil Penjualan</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> <span id="brk-sales">79.246.000</span></td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Pengeluaran Operasi (post-modal)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-peng-operasi">14.829.097</span></td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Stok Tertahan (329 KG inventory)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-stok-tertahan">22.585.521</span></td></tr>
+            <tr style="background:#DAEBE0"><td style="padding:9px 10px;font-weight:700;color:#2D5640">= Saldo Rekening Expected</td><td class="num" style="padding:9px 10px;font-weight:700;color:#2D5640;font-family:monospace"><span style="font-size:11px">Rp</span> <span id="brk-saldo-rekening">41.831.382</span></td></tr>
             <tr><td style="padding:7px 10px;font-size:11px;color:var(--muted);font-style:italic">↑ Ini yang harusnya match dengan saldo BSI sebelum loan</td><td></td></tr>
           </tbody>
         </table>
@@ -268,9 +268,9 @@ footer a{color:var(--steel);text-decoration:none}
         <table style="font-size:13px">
           <tbody>
             <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Modal Awal</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> 77.750.000</td></tr>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Total Sales</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> 79.246.000</td></tr>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Total Pengeluaran (incl. modal awal)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> 92.579.097</td></tr>
-            <tr style="background:#E0EBF5"><td style="padding:9px 10px;font-weight:700;color:#1B2A41">= Saldo Formal Total</td><td class="num" style="padding:9px 10px;font-weight:700;color:#3A6EA5;font-family:monospace"><span style="font-size:11px">Rp</span> 64.416.903</td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Total Sales</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> <span id="brk-total-sales">79.246.000</span></td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Total Pengeluaran (incl. modal awal)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-total-peng">92.579.097</span></td></tr>
+            <tr style="background:#E0EBF5"><td style="padding:9px 10px;font-weight:700;color:#1B2A41">= Saldo Formal Total</td><td class="num" style="padding:9px 10px;font-weight:700;color:#3A6EA5;font-family:monospace"><span style="font-size:11px">Rp</span> <span id="brk-saldo-formal">64.416.903</span></td></tr>
             <tr><td style="padding:7px 10px;font-size:11px;color:var(--muted);font-style:italic">= Saldo Rekening + Stok Tertahan (total wealth)</td><td></td></tr>
           </tbody>
         </table>
@@ -2099,6 +2099,23 @@ document.getElementById('cp-saldo-rek').innerHTML = '<span style="font-size:11px
 document.getElementById('cp-sales').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.sales,0);
 document.getElementById('cp-pengeluaran').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.peng_riil,0);
 document.getElementById('cp-stock-tertahan').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.stock_value,0);
+// Update breakdown table spans
+const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtN(val, 0); };
+setText('brk-sales', CP.sales);
+setText('brk-peng-operasi', CP.peng_riil);
+setText('brk-stok-tertahan', CP.stock_value);
+setText('brk-saldo-rekening', CP.cash_liquid);
+setText('brk-total-sales', CP.sales);
+setText('brk-total-peng', CP.peng_total);
+setText('brk-saldo-formal', CP.saldo_formal);
+// Update sub-text "Per 5 Mei 2026 - STOCK 329 KG OPNAME-CONFIRMED" with live stock kg
+const cpHeader = document.querySelector('h2');
+// Update 'Stok Tertahan (329 KG inventory)' label dynamically
+document.querySelectorAll('td').forEach(td => {
+  if (td.textContent && td.textContent.includes('Stok Tertahan') && td.textContent.includes('inventory')) {
+    td.textContent = '− Stok Tertahan (' + Math.round(CP.stock_kg) + ' KG inventory)';
+  }
+});
 
 // Owner Loan storage (localStorage isn't supported per CSP; use in-memory + manual export)
 let ownerLoans = [];
