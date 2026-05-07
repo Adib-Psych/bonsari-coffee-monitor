@@ -1037,6 +1037,65 @@ function __recomputeKPIs() {
   if (Object.keys(bySupplier).length > 0) {
     D.logbook.aggregates.pembelian_by_supplier = bySupplier;
   }
+  // === Cross-component sync ===
+  const MODAL_AWAL = 77750000;
+  const AVG_HPP_KG = 68649;
+  const DEPRESIASI_7BLN = 801680;
+  const PAJAK_UMKM_RATE = 0.005;
+  const pengeluaranOperasi = D.kpi.total_exp - MODAL_AWAL;
+  const stockKg = D.logbook.aggregates.stock_now || 0;
+  const stockValue = stockKg * AVG_HPP_KG;
+  // 1. Cash Position
+  if (!D.cash_position) D.cash_position = {};
+  D.cash_position.modal_awal = MODAL_AWAL;
+  D.cash_position.sales = D.kpi.total_sales;
+  D.cash_position.peng_total = D.kpi.total_exp;
+  D.cash_position.peng_riil = pengeluaranOperasi;
+  D.cash_position.stock_kg = stockKg;
+  D.cash_position.avg_hpp = AVG_HPP_KG;
+  D.cash_position.stock_value = stockValue;
+  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi;
+  D.cash_position.saldo_formal = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp + stockValue;
+  // 2. Header KPI Stock GB Akhir
+  if (!D.meta) D.meta = {};
+  D.meta.stock_calc_kg = Math.round(stockKg);
+  // 3. Accounting P&L
+  if (!D.accounting) D.accounting = {};
+  if (!D.accounting.pl) D.accounting.pl = {};
+  const totalHpp = sumField(gbSales, 'total_hpp') + sumField(rbSales, 'total_hpp');
+  const grossProfit = D.kpi.total_sales - totalHpp;
+  // OpEx period: pengeluaran kategori "Operasional" + branding (excluding Pembelian, Sortir, Roasting which are HPP-related)
+  const opexPeriod = exp.filter(e => /operasion|branding|kemasan/i.test(e.kategori || '')).reduce((s, r) => s + (+r.total || 0), 0);
+  const netProfit = grossProfit - opexPeriod - DEPRESIASI_7BLN;
+  D.accounting.pl.sales = D.kpi.total_sales;
+  D.accounting.pl.hpp = totalHpp;
+  D.accounting.pl.gross_profit = grossProfit;
+  D.accounting.pl.opex_period = opexPeriod;
+  D.accounting.pl.depresiasi = DEPRESIASI_7BLN;
+  D.accounting.pl.net_profit = netProfit;
+  // 4. Neraca
+  if (!D.accounting.neraca) D.accounting.neraca = {};
+  const kas = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp;
+  const investasiAlatGross = exp.filter(e => /investasi.*alat/i.test(e.kategori || '')).reduce((s, r) => s + (+r.total || 0), 0);
+  const fixedAssetNet = Math.max(0, investasiAlatGross - DEPRESIASI_7BLN);
+  const totalAset = kas + stockValue + fixedAssetNet;
+  D.accounting.neraca.kas = kas;
+  D.accounting.neraca.inventory_gb_kg = stockKg;
+  D.accounting.neraca.inventory_gb_value = stockValue;
+  D.accounting.neraca.avg_hpp = AVG_HPP_KG;
+  D.accounting.neraca.fixed_asset_gross = investasiAlatGross || 4122926;
+  D.accounting.neraca.fixed_asset_net = fixedAssetNet || 3321246;
+  D.accounting.neraca.depresiasi_accum = DEPRESIASI_7BLN;
+  D.accounting.neraca.total_aset = totalAset;
+  D.accounting.neraca.modal_awal = MODAL_AWAL;
+  D.accounting.neraca.laba_ditahan = totalAset - MODAL_AWAL;
+  // 5. Reclass totals (re-aggregate from pengeluaran)
+  if (!D.accounting.reclass_totals) D.accounting.reclass_totals = {};
+  const inv = exp.filter(e => /pembelian.*green|investasi.*alat/i.test(e.kategori || '')).reduce((s, r) => s + (+r.total || 0), 0);
+  const hppMatched = exp.filter(e => /roasting|sortir/i.test(e.kategori || '')).reduce((s, r) => s + (+r.total || 0), 0);
+  D.accounting.reclass_totals.investment = inv;
+  D.accounting.reclass_totals.hpp_matched = hppMatched;
+  D.accounting.reclass_totals.period_opex = opexPeriod;
 }
 
 async function refreshFromAPI() {
