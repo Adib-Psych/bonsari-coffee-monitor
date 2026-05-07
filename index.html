@@ -796,18 +796,6 @@ footer a{color:var(--steel);text-decoration:none}
     
     <!-- Grade cards grid -->
     <div id="lb-hero-grade-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:18px"></div>
-    
-    <!-- ✨ LIVE STOCK PER GRADE (computed dari sortasi flow) -->
-    <div style="background:#FFF7ED;border:2px dashed #E8975A;border-radius:10px;padding:14px;margin-bottom:18px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div>
-          <div style="font-weight:700;color:#7A4A1F;font-size:14px">⚡ LIVE Stock per Grade — Computed</div>
-          <div style="font-size:11px;color:#A06A2D;margin-top:2px">Real-time dari Pembelian − Sortasi flow − Sales · Compare ke opname HERO di atas</div>
-        </div>
-        <div id="live-stock-total-badge" style="background:#fff;border:1px solid #E8975A;padding:6px 12px;border-radius:6px;font-weight:700;color:#7A4A1F;font-size:14px">— KG</div>
-      </div>
-      <div id="live-stock-grade-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px"></div>
-    </div>
 
     
     <!-- Flow diagram -->
@@ -1117,23 +1105,9 @@ function mergeApiData(apiResponse) {
       id: s.id || '',
       batch_status: s.batch_status || ''
     }));
-    // Recompute sortasi_totals from fresh batches
-    const sb = D.sortasi_batches;
-    const sum = (arr, f) => arr.reduce((s, b) => s + (+b[f] || 0), 0);
-    D.sortasi_totals = D.sortasi_totals || {};
-    D.sortasi_totals.qty_input = sum(sb, 'qty_input');
-    D.sortasi_totals.gbp_out = sum(sb, 'gbp_out');
-    D.sortasi_totals.gbc_out = sum(sb, 'gbc_out');
-    D.sortasi_totals.gbl_out = sum(sb, 'lanang_out');
-    D.sortasi_totals.gbs_out = sum(sb, 'gbs_out');
-    D.sortasi_totals.susut = sum(sb, 'susut');
-    D.sortasi_totals.ongkos = sum(sb, 'ongkos');
-    const inp = D.sortasi_totals.qty_input;
-    D.sortasi_totals.yield_gbp_pct = inp > 0 ? D.sortasi_totals.gbp_out / inp * 100 : 0;
-    D.sortasi_totals.yield_gbc_pct = inp > 0 ? D.sortasi_totals.gbc_out / inp * 100 : 0;
-    D.sortasi_totals.yield_gbl_pct = inp > 0 ? D.sortasi_totals.gbl_out / inp * 100 : 0;
-    D.sortasi_totals.yield_gbs_pct = inp > 0 ? D.sortasi_totals.gbs_out / inp * 100 : 0;
-    D.sortasi_totals.susut_pct = inp > 0 ? D.sortasi_totals.susut / inp * 100 : 0;
+    // NOTE: D.sortasi_totals tetap pakai baked-in baseline 4 Mei 2026 (locked)
+    // New entries muncul di detail table via D.sortasi_batches, tapi yield aggregates
+    // di-anchor ke baseline 4 Mei untuk konsistensi. Update baseline kalau opname fisik berikutnya dilakukan.
   }
   // Recompute KPIs from fresh entries so header + cards update
   __recomputeKPIs();
@@ -1784,33 +1758,6 @@ document.getElementById('sort-yield-cards').innerHTML = `
         ${w.outstanding > 0 ? `<button onclick="bayarWorkerAll('${w.pekerja.replace(/'/g, '&apos;')}', ${w.outstanding})" style="background:#3A6EA5;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">💸 Bayar Semua (${fmt(w.outstanding)})</button>` : '<div style="text-align:center;padding:6px;font-size:11px;color:#5B9279;font-weight:600">✅ Semua batch sudah dibayar</div>'}
         <button onclick="openBatchDetail('${w.pekerja.replace(/'/g, '&apos;')}')" style="background:#fff;color:#3A6EA5;border:1px solid #3A6EA5;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">📋 Detail Batch</button>
       </div>
-    </div>`;
-  }).join('');
-})();
-
-// === LIVE Stock per Grade Renderer ===
-(function renderLiveStockGrade(){
-  const sg = D.stock_per_grade_live || {};
-  const total = D.stock_total_live || 0;
-  const totalBadge = document.getElementById('live-stock-total-badge');
-  if (totalBadge) totalBadge.textContent = fmtN(total, 1) + ' KG total';
-  const grid = document.getElementById('live-stock-grade-grid');
-  if (!grid) return;
-  const grades = [
-    {code:'GBO', name:'Original', color:'#7A4A1F', bg:'#FCE5D2'},
-    {code:'GBP', name:'Premium', color:'#3A6EA5', bg:'#E0EBF5'},
-    {code:'GBC', name:'Special', color:'#888780', bg:'#F1EFE8'},
-    {code:'GBL', name:'Lanang', color:'#5B9279', bg:'#DAEBE0'},
-    {code:'GBS', name:'Sorted', color:'#B85C5C', bg:'#FCEBEB'}
-  ];
-  grid.innerHTML = grades.map(g => {
-    const kg = sg[g.code] || 0;
-    const pctTotal = total > 0 ? (kg/total*100) : 0;
-    return `<div style="background:${g.bg};border:1px solid ${g.color};border-radius:8px;padding:10px;text-align:center">
-      <div style="font-size:11px;color:${g.color};font-weight:700;text-transform:uppercase">${g.code}</div>
-      <div style="font-size:9px;color:${g.color};opacity:0.7">${g.name}</div>
-      <div style="font-size:18px;font-weight:700;color:${g.color};margin-top:4px">${fmtN(Math.max(0,kg), 1)}</div>
-      <div style="font-size:10px;color:${g.color};opacity:0.8">KG · ${pctTotal.toFixed(1)}%</div>
     </div>`;
   }).join('');
 })();
