@@ -320,6 +320,14 @@
 </div>
 
 <div class="pane" id="pane-sortasi">
+  <!-- ✨ WORKER STATS QUICK INFO PANEL -->
+  <div style="background:#FFF7ED;border:1px solid #E8975A;border-radius:8px;padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-weight:700;font-size:13px;color:#7A4A1F">👥 Worker Status — Live Info</div>
+      <button onclick="refreshWorkerStats()" style="background:#fff;border:1px solid #E8975A;border-radius:5px;padding:4px 10px;font-size:11px;color:#7A4A1F;cursor:pointer;font-weight:600">🔄 Refresh</button>
+    </div>
+    <div id="worker-stats-panel" style="font-size:12px"><div style="text-align:center;color:var(--muted);padding:14px;font-size:11.5px">Loading worker stats...</div></div>
+  </div>
   <div class="form-grid">
     <div class="form-card">
       <h2>🌿 Entry Sortasi Batch</h2>
@@ -524,6 +532,8 @@ function init(){
   document.getElementById('header-date').textContent = fmtDate(todayStr());
   ['gb-date','rb-date','exp-date','srt-tgl-ambil','adj-date'].forEach(id=>{ const el = document.getElementById(id); if(el) el.value = todayStr(); });
   populateCustomerDatalist();
+  // Auto-fetch worker stats saat sortasi tab dibuka
+  setTimeout(() => refreshWorkerStats(), 500);
   const sl = document.getElementById('suppliers-list');
   // Sort suppliers alphabetically too
   [...(REF.suppliers||[])].sort((a,b) => String(a||'').localeCompare(String(b||''), 'id', {sensitivity:'base'}))
@@ -651,6 +661,82 @@ function recalcSortasi(){
   document.getElementById('srt-total-setor').textContent = fmtN(tot,3)+' KG';
   document.getElementById('srt-susut').textContent = fmtN(inp-tot,3)+' KG';
   document.getElementById('srt-yield').textContent = fmtN(inp>0?(tot/inp*100):0,1)+'%';
+  // Auto-calc ongkos = (total_setor - gbs) × 3000 (GBS excl)
+  const ongkosCalc = Math.round((tot - gbs) * 3000);
+  const ongkosField = document.getElementById('srt-ongkos');
+  // Only auto-fill kalau user belum input manual (atau samain dengan calc)
+  if (ongkosField && (!ongkosField.value || +ongkosField.dataset.autoFilled === 1)) {
+    ongkosField.value = ongkosCalc;
+    ongkosField.dataset.autoFilled = 1;
+  }
+  // Hint badge below ongkos field
+  let hint = document.getElementById('srt-ongkos-hint');
+  if (!hint && ongkosField) {
+    hint = document.createElement('div');
+    hint.id = 'srt-ongkos-hint';
+    hint.style.cssText = 'font-size:11px;color:var(--muted);margin-top:3px';
+    ongkosField.parentNode.appendChild(hint);
+  }
+  if (hint) {
+    hint.innerHTML = '💡 Auto-calc: (Total Setor − GBS) × Rp 3.000 = <strong>Rp ' + ongkosCalc.toLocaleString('id-ID') + '</strong>';
+  }
+}
+
+// Worker stats panel — fetch from API and render at sortasi page top
+async function refreshWorkerStats() {
+  const apiUrl = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec?data=all';
+  try {
+    const r = await fetch(apiUrl);
+    const j = await r.json();
+    const sortasi = j?.data?.sortasi || [];
+    // Aggregate per worker (with normalization)
+    const stats = {};
+    let totalGbDiPekerja = 0;
+    sortasi.forEach(s => {
+      let w = (s.pekerja || '').toString().trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+      if (!w) return;
+      if (!stats[w]) stats[w] = { pekerja: w, batch: 0, outstanding: 0, paid: 0, pending_kg: 0, total_input: 0, total_setor: 0 };
+      stats[w].batch++;
+      stats[w].total_input += +s.qty_input || 0;
+      stats[w].total_setor += +s.total_setor || 0;
+      let ongkos = +s.ongkos || 0;
+      if (!ongkos && s.total_setor) ongkos = ((+s.total_setor || 0) - (+s.gbs || 0)) * 3000;
+      const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
+      if (isPaid) stats[w].paid += ongkos;
+      else stats[w].outstanding += ongkos;
+      const noSetor = !s.tgl_setor || !s.total_setor || +s.total_setor === 0;
+      if (noSetor && +s.qty_input > 0) {
+        stats[w].pending_kg += +s.qty_input;
+        totalGbDiPekerja += +s.qty_input;
+      }
+    });
+    renderWorkerStatsPanel(Object.values(stats), totalGbDiPekerja);
+  } catch (e) {
+    console.warn('Worker stats fetch failed:', e.message);
+  }
+}
+
+function renderWorkerStatsPanel(workers, gbDiPekerja) {
+  const panel = document.getElementById('worker-stats-panel');
+  if (!panel) return;
+  if (workers.length === 0) {
+    panel.innerHTML = '<div style="text-align:center;color:var(--muted);padding:14px;font-size:12px">Belum ada batch sortasi tercatat</div>';
+    return;
+  }
+  const fmtRpLocal = n => 'Rp ' + Math.round(n||0).toLocaleString('id-ID');
+  const totalOutstanding = workers.reduce((s,w) => s+w.outstanding, 0);
+  const totalPaid = workers.reduce((s,w) => s+w.paid, 0);
+  panel.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">'
+    + '<div style="flex:1;min-width:120px;background:#FCEBEB;border:1px solid #B85C5C;border-radius:6px;padding:8px"><div style="font-size:10px;color:#7A2A2A;font-weight:700">💸 OUTSTANDING</div><div style="font-size:14px;font-weight:700;color:#B85C5C">'+fmtRpLocal(totalOutstanding)+'</div></div>'
+    + '<div style="flex:1;min-width:120px;background:#DAEBE0;border:1px solid #5B9279;border-radius:6px;padding:8px"><div style="font-size:10px;color:#2D5640;font-weight:700">✅ PAID</div><div style="font-size:14px;font-weight:700;color:#2D5640">'+fmtRpLocal(totalPaid)+'</div></div>'
+    + '<div style="flex:1;min-width:120px;background:#E0EBF5;border:1px solid #3A6EA5;border-radius:6px;padding:8px"><div style="font-size:10px;color:#1B2A41;font-weight:700">🏋️ GB DI PEKERJA</div><div style="font-size:14px;font-weight:700;color:#3A6EA5">'+(gbDiPekerja).toFixed(1)+' KG</div></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    + workers.map(w => {
+        const pct = w.total_input > 0 ? (w.total_setor / w.total_input * 100).toFixed(1) : '0';
+        return '<div style="background:#fff;border:1px solid #ddd;border-left:3px solid #3A6EA5;border-radius:6px;padding:8px"><div style="font-weight:700;font-size:12px">👷 '+w.pekerja+'</div><div style="font-size:10.5px;color:var(--muted)">'+w.batch+' batch · yield '+pct+'%</div><div style="margin-top:4px;font-size:11px"><span style="color:#B85C5C">Outstanding: '+fmtRpLocal(w.outstanding)+'</span></div>'+(w.pending_kg>0?'<div style="font-size:10.5px;color:#7A4A1F;background:#FCE5D2;padding:3px 6px;border-radius:4px;margin-top:4px;display:inline-block">🏋️ '+w.pending_kg.toFixed(1)+' KG belum kembali</div>':'')+'</div>';
+      }).join('')
+    + '</div>';
 }
 
 function recalcExp(){
