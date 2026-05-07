@@ -716,28 +716,35 @@ function migrateExistingSortasi() {
 }
 
 /**
- * RESET: Delete all non-baseline rows in GB_Movement.
- * Use after migration goes wrong, then re-run setupBaseline if needed.
+ * RESET: Wipe all GB_Movement rows then re-insert baseline.
+ * Fast: uses sheet.clearContents() + appendRow(baseline) instead of per-row delete.
  */
 function resetMovementsKeepBaseline() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(SHEETS.GB_MOVEMENT);
   if (!sheet) return { ok:false, err:'GB_Movement not found' };
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return { ok:true, deleted:0 };
-  const data = sheet.getRange(2,1,lastRow-1,sheet.getLastColumn()).getValues();
-  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
-  const sourceCol = headers.indexOf('source');
-  let deleted = 0;
-  // Iterate from bottom to safely delete
-  for (let i = data.length - 1; i >= 0; i--) {
-    if (data[i][sourceCol] !== 'baseline') {
-      sheet.deleteRow(i + 2);
-      deleted++;
-    }
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
+    sheet.deleteRows(2, lastRow - 1);
   }
-  Logger.log('Reset complete: ' + deleted + ' non-baseline movement rows deleted');
-  return { ok:true, deleted:deleted };
+  // Re-insert baseline rows
+  const baselineDate = '2026-05-05';
+  BASELINE_5MEI.forEach((b, i) => {
+    appendMovement_(ss, {
+      id: 'MV_BASELINE_' + (i+1).toString().padStart(3,'0'),
+      tanggal_iso: baselineDate,
+      source: 'baseline',
+      grade: b.grade,
+      qty_signed: +b.kg,
+      lokasi: b.lokasi,
+      pekerja: b.lokasi.startsWith('di_pekerja:') ? b.lokasi.replace('di_pekerja:','') : '',
+      ref_id: '',
+      catatan: b.catatan
+    });
+  });
+  Logger.log('Reset complete: cleared all rows + re-inserted ' + BASELINE_5MEI.length + ' baseline rows');
+  return { ok:true, baseline_rows: BASELINE_5MEI.length };
 }
 
 /**
