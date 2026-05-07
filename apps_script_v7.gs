@@ -87,6 +87,10 @@ function doGet(e) {
     // V7.3: DO NOT auto-migrate in doGet. Historical sortasi batches are already
     // reflected in baseline 5 Mei opname (313.97 KG); re-migrating would double-count.
     // Migration only for NEW batches submitted post-baseline via doPost handlers.
+    // Manual reset hook: hit /exec?reset=1 to clear non-baseline movements
+    if (e && e.parameter && e.parameter.reset === '1') {
+      resetMovementsKeepBaseline();
+    }
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
