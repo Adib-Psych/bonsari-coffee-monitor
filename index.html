@@ -1093,7 +1093,48 @@ function mergeApiData(apiResponse) {
   if (data.pengeluaran && data.pengeluaran.length > 0) {
     D.pengeluaran = __translatePengeluaran(data.pengeluaran);
   }
-  // Sortasi & logbook keep as-is for now (different rendering schema)
+  // Update sortasi_batches from API so Sortasi tab reflects new entries
+  if (data.sortasi && data.sortasi.length > 0) {
+    D.sortasi_batches = data.sortasi.map((s, i) => ({
+      no: i + 1,
+      pekerja: s.pekerja || '',
+      tgl_ambil: __formatIdnDate(s.tgl_ambil) || (s.tgl_ambil || '').slice(0,10),
+      tgl_ambil_iso: (s.tgl_ambil || '').slice(0,10),
+      tgl_setor: __formatIdnDate(s.tgl_setor) || (s.tgl_setor || '').slice(0,10),
+      tgl_setor_iso: (s.tgl_setor || '').slice(0,10),
+      bakalan: s.bakalan || '',
+      qty_input: +s.qty_input || 0,
+      gbp_out: +s.gbp || 0,
+      gbc_out: +s.gbc || 0,
+      lanang_out: +s.gbl || 0,
+      gbs_out: +s.gbs || 0,
+      total_setor: +s.total_setor || 0,
+      susut: +s.susut || 0,
+      yield_pct: +s.yield_pct || 0,
+      ongkos: +s.ongkos || 0,
+      ongkos_paid: s.ongkos_paid || '',
+      paid_date: s.paid_date || '',
+      id: s.id || '',
+      batch_status: s.batch_status || ''
+    }));
+    // Recompute sortasi_totals from fresh batches
+    const sb = D.sortasi_batches;
+    const sum = (arr, f) => arr.reduce((s, b) => s + (+b[f] || 0), 0);
+    D.sortasi_totals = D.sortasi_totals || {};
+    D.sortasi_totals.qty_input = sum(sb, 'qty_input');
+    D.sortasi_totals.gbp_out = sum(sb, 'gbp_out');
+    D.sortasi_totals.gbc_out = sum(sb, 'gbc_out');
+    D.sortasi_totals.gbl_out = sum(sb, 'lanang_out');
+    D.sortasi_totals.gbs_out = sum(sb, 'gbs_out');
+    D.sortasi_totals.susut = sum(sb, 'susut');
+    D.sortasi_totals.ongkos = sum(sb, 'ongkos');
+    const inp = D.sortasi_totals.qty_input;
+    D.sortasi_totals.yield_gbp_pct = inp > 0 ? D.sortasi_totals.gbp_out / inp * 100 : 0;
+    D.sortasi_totals.yield_gbc_pct = inp > 0 ? D.sortasi_totals.gbc_out / inp * 100 : 0;
+    D.sortasi_totals.yield_gbl_pct = inp > 0 ? D.sortasi_totals.gbl_out / inp * 100 : 0;
+    D.sortasi_totals.yield_gbs_pct = inp > 0 ? D.sortasi_totals.gbs_out / inp * 100 : 0;
+    D.sortasi_totals.susut_pct = inp > 0 ? D.sortasi_totals.susut / inp * 100 : 0;
+  }
   // Recompute KPIs from fresh entries so header + cards update
   __recomputeKPIs();
 }
@@ -1302,8 +1343,13 @@ function __recomputeKPIs() {
     else if (kode === 'GCP') stockGrade.GBO -= consumed;
     else stockGrade.GBP -= consumed; // RBP, RBC, RBL
   });
+  // Pre-packed carve-out: R&D Wakaf 56 KG + Jago Ireng 5 KG = 61 KG
+  // These are physical stock di lokasi terpisah (tidak di-sales/tidak di-roast)
+  // Per baseline 4 Mei 2026 documentation
   D.stock_per_grade_live = stockGrade;
-  D.stock_total_live = Math.max(0, Object.values(stockGrade).reduce((a,b)=>a+b,0));
+  D.stock_carve_out = { 'R&D Wakaf': 56, 'Jago Ireng': 5 };
+  D.stock_carve_out_total = 61;
+  D.stock_total_live = Math.max(0, Object.values(stockGrade).reduce((a,b)=>a+b,0)) + D.stock_carve_out_total;
 }
 
 async function refreshFromAPI() {
@@ -1817,12 +1863,23 @@ window.openBatchDetail = function(pekerja) {
       <div style="background:#DAEBE0;padding:8px 12px;border-radius:6px;font-size:12px;color:#2D5640">Paid: <strong>${fmt(totalPaid)}</strong></div>
       <div style="background:#FCEBEB;padding:8px 12px;border-radius:6px;font-size:12px;color:#7A2A2A">Outstanding: <strong>${fmt(totalOngkos - totalPaid)}</strong></div>
     </div>
+    <!-- Batch Counter + Quick Actions -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <div style="background:#FCEBEB;border:1px solid #B85C5C;border-radius:6px;padding:8px 14px">
+        <div style="font-size:10px;color:#7A2A2A;font-weight:700">📊 BATCH STATUS</div>
+        <div style="font-size:13px;color:#1B2A41" id="bd-batch-counter">— total · — paid · — outstanding</div>
+        <div style="font-size:11px;color:#B85C5C;font-weight:600" id="bd-pay-projection">Outstanding: —</div>
+      </div>
+      <button onclick="bdSelectAllUnpaid()" style="background:#3A6EA5;color:#fff;border:none;border-radius:5px;padding:7px 14px;font-size:11.5px;cursor:pointer;font-weight:600">☑️ Centang Semua Outstanding</button>
+      <button onclick="bdSelectVisibleUnpaid()" style="background:#fff;color:#3A6EA5;border:1px solid #3A6EA5;border-radius:5px;padding:7px 14px;font-size:11.5px;cursor:pointer">☑️ Centang Visible Outstanding</button>
+    </div>
     <!-- Filter -->
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--muted);font-weight:600">Filter:</span>
       <select id="bd-filter-status" onchange="renderBatchTable('${pekerja.replace(/'/g, '&apos;')}')" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px">
         <option value="">All Status</option>
         <option value="paid">Paid Only</option>
-        <option value="unpaid">Outstanding Only</option>
+        <option value="unpaid" selected>Outstanding Only</option>
       </select>
       <input type="date" id="bd-filter-from" onchange="renderBatchTable('${pekerja.replace(/'/g, '&apos;')}')" placeholder="From date" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px" />
       <input type="date" id="bd-filter-to" onchange="renderBatchTable('${pekerja.replace(/'/g, '&apos;')}')" placeholder="To date" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px" />
@@ -1831,7 +1888,9 @@ window.openBatchDetail = function(pekerja) {
     <!-- Table -->
     <div id="bd-table-wrap" style="overflow:auto"></div>
     <div id="bd-pending-changes" style="margin-top:14px;background:#FFF7ED;padding:10px;border-radius:6px;display:none">
-      <strong>Pending changes:</strong> <span id="bd-changes-count">0</span> · <button onclick="saveBatchChanges('${pekerja.replace(/'/g, '&apos;')}')" style="background:#5B9279;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;margin-left:10px">💾 Save All</button>
+      <strong>Pending changes:</strong> <span id="bd-changes-count">0</span>
+      <button onclick="saveBatchChanges('${pekerja.replace(/'/g, '&apos;')}')" style="background:#5B9279;color:#fff;border:none;padding:6px 14px;border-radius:5px;cursor:pointer;margin-left:10px">💾 Save All</button>
+      <div style="font-size:10.5px;color:#7A4A1F;margin-top:6px;font-style:italic">💡 Saat batch di-mark paid, Pengeluaran kategori "Sortir" auto-tergenerate (tidak double-count).</div>
     </div>
   </div>`;
   window.__pendingBatchChanges = {};
@@ -1859,6 +1918,20 @@ window.renderBatchTable = function(pekerja) {
   });
   batches.sort((a,b) => (b.tgl_ambil || '').localeCompare(a.tgl_ambil || ''));
   const wrap = document.getElementById('bd-table-wrap');
+  // Update counter (using ALL batches not filtered)
+  const allBatches = sortasiBatches.filter(s => {
+    let w = (s.pekerja || '').toString().trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return w === pekerja;
+  });
+  const totalBatch = allBatches.length;
+  const paidBatch = allBatches.filter(b => (b.ongkos_paid||'').toUpperCase()==='YES').length;
+  const unpaidBatch = totalBatch - paidBatch;
+  const outstandingTotal = allBatches.filter(b => (b.ongkos_paid||'').toUpperCase()!=='YES')
+    .reduce((s,b) => s + (+b.ongkos || ((+b.total_setor||0) - (+b.gbs||0)) * 3000), 0);
+  const counterEl = document.getElementById('bd-batch-counter');
+  if (counterEl) counterEl.innerHTML = '<strong>' + totalBatch + '</strong> total · <strong style="color:#5B9279">' + paidBatch + '</strong> paid · <strong style="color:#B85C5C">' + unpaidBatch + '</strong> outstanding';
+  const projEl = document.getElementById('bd-pay-projection');
+  if (projEl && unpaidBatch > 0) projEl.innerHTML = 'Tinggal <strong>' + unpaidBatch + '</strong> batch outstanding = <strong>' + fmt(outstandingTotal) + '</strong>';
   if (batches.length === 0) { wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Tidak ada batch dengan filter ini</div>'; return; }
   let html = '<table style="width:100%;font-size:11.5px;border-collapse:collapse">';
   html += '<thead><tr style="background:#1B2A41;color:#fff"><th style="padding:8px;text-align:left">Tgl Ambil</th><th style="padding:8px;text-align:left">Batch ID</th><th style="padding:8px;text-align:left">Bakalan</th><th style="padding:8px;text-align:right">Input</th><th style="padding:8px;text-align:right">Setor</th><th style="padding:8px;text-align:right">Ongkos</th><th style="padding:8px;text-align:center">Paid?</th><th style="padding:8px;text-align:left">Tgl Bayar</th></tr></thead><tbody>';
@@ -1889,27 +1962,93 @@ window.bdMarkChange = function(el) {
   const val = el.type === 'checkbox' ? el.checked : el.value;
   if (!window.__pendingBatchChanges) window.__pendingBatchChanges = {};
   if (!window.__pendingBatchChanges[bid]) window.__pendingBatchChanges[bid] = { batchId: bid };
-  if (field === 'paid') window.__pendingBatchChanges[bid].paid = val;
+  if (field === 'paid') {
+    window.__pendingBatchChanges[bid].paid = val;
+    // Auto-set paid_date to today if checking
+    if (val) {
+      const today = new Date().toISOString().slice(0, 10);
+      window.__pendingBatchChanges[bid].paid_date = today;
+      const dateInput = document.querySelector('input[data-bid="' + bid + '"][data-field="paid_date"]');
+      if (dateInput) dateInput.value = today;
+    }
+    // Auto-pull current ongkos
+    const ongkosInput = document.querySelector('input[data-bid="' + bid + '"][data-field="ongkos"]');
+    if (ongkosInput && !window.__pendingBatchChanges[bid].ongkos) {
+      window.__pendingBatchChanges[bid].ongkos = +ongkosInput.value || 0;
+    }
+  }
   else if (field === 'ongkos') window.__pendingBatchChanges[bid].ongkos = +val;
   else if (field === 'paid_date') window.__pendingBatchChanges[bid].paid_date = val;
-  // Show pending changes panel
+  // Update pending UI
   const count = Object.keys(window.__pendingBatchChanges).length;
   document.getElementById('bd-changes-count').textContent = count + ' batch(es) edited';
   document.getElementById('bd-pending-changes').style.display = count > 0 ? 'block' : 'none';
+  // Update payment projection
+  bdUpdatePayProjection();
+};
+
+window.bdUpdatePayProjection = function() {
+  const newlyPaid = Object.values(window.__pendingBatchChanges || {}).filter(u => u.paid === true);
+  const totalProj = newlyPaid.reduce((s, u) => s + (+u.ongkos || 0), 0);
+  const proj = document.getElementById('bd-pay-projection');
+  if (proj) {
+    if (newlyPaid.length > 0) {
+      proj.textContent = '⏳ Akan dibayar: ' + newlyPaid.length + ' batch · ' + fmt(totalProj);
+      proj.style.color = '#3A6EA5';
+    } else {
+      proj.textContent = 'Outstanding: belum ada perubahan';
+      proj.style.color = '#B85C5C';
+    }
+  }
+};
+
+window.bdSelectAllUnpaid = function() {
+  // Find all batches for current worker, mark all unpaid as paid
+  const checkboxes = document.querySelectorAll('input[data-field="paid"]');
+  let count = 0;
+  checkboxes.forEach(cb => {
+    if (!cb.checked) {
+      cb.checked = true;
+      bdMarkChange(cb);
+      count++;
+    }
+  });
+  if (count === 0) alert('Semua batch sudah paid');
+};
+
+window.bdSelectVisibleUnpaid = function() {
+  // Only check checkboxes currently visible (after filter)
+  const checkboxes = document.querySelectorAll('#bd-table-wrap input[data-field="paid"]');
+  let count = 0;
+  checkboxes.forEach(cb => {
+    if (!cb.checked) {
+      cb.checked = true;
+      bdMarkChange(cb);
+      count++;
+    }
+  });
+  if (count === 0) alert('Tidak ada batch outstanding di view ini');
 };
 
 window.saveBatchChanges = async function(pekerja) {
   const updates = Object.values(window.__pendingBatchChanges || {});
   if (updates.length === 0) { alert('Tidak ada perubahan'); return; }
-  if (!confirm('Save ' + updates.length + ' batch update(s)?')) return;
+  const newlyPaid = updates.filter(u => u.paid === true);
+  const totalNewPay = newlyPaid.reduce((s,u) => s + (+u.ongkos || 0), 0);
+  let confirmMsg = 'Save ' + updates.length + ' batch update(s)?';
+  if (newlyPaid.length > 0) {
+    confirmMsg += '\n\n💸 ' + newlyPaid.length + ' batch akan di-mark PAID (total ' + fmt(totalNewPay) + ').';
+    confirmMsg += '\n📒 Pengeluaran kategori "Sortir" akan auto-tergenerate untuk record cash out.';
+  }
+  if (!confirm(confirmMsg)) return;
   const apiUrl = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
   try {
     await fetch(apiUrl, {
       method: 'POST', mode: 'no-cors',
       headers: {'Content-Type': 'text/plain'},
-      body: JSON.stringify({ action: 'update_payment', updates: updates })
+      body: JSON.stringify({ action: 'update_payment', updates: updates, pekerja: pekerja })
     });
-    alert('✅ ' + updates.length + ' batch sudah di-update.\nDashboard akan refresh otomatis...');
+    alert('✅ ' + updates.length + ' batch updated.' + (newlyPaid.length > 0 ? '\n💰 Pengeluaran Sortir auto-created (' + fmt(totalNewPay) + ').' : '') + '\n\nDashboard akan refresh otomatis...');
     window.__pendingBatchChanges = {};
     setTimeout(() => location.reload(), 8000);
   } catch (e) {
