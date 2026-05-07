@@ -1237,12 +1237,16 @@ function __recomputeKPIs() {
       gbDiPekerjaTotal += qty;
     }
   });
-  // Fallback: if no movements yet, use baseline 313.97
+  // Fallback: if no movements yet (initial render), use baseline values
   if (movements.length === 0) {
-    stockByGrade.GBO = 169.50; stockByGrade.GBP = 37.44; stockByGrade.GBC = 7.41;
-    stockByGrade.GBL = 47.69; stockByGrade.GBS = 28.84;
-    totalGB = 305.88 + 15.00; // includes Sortir Out 15 KG
+    stockByGrade.GBO = 184.50; // 169.50 di_tempat + 15 di_pekerja
+    stockByGrade.GBP = 37.44;
+    stockByGrade.GBC = 7.41;
+    stockByGrade.GBL = 47.69;
+    stockByGrade.GBS = 28.84;
+    totalGB = 305.88; // total baseline (excluding RB Form)
     gbDiPekerjaTotal = 15.00;
+    gbDiPekerjaPerWorker['Unknown'] = 15.00;
   }
   D.stock_per_grade_live = stockByGrade;
   D.stock_per_grade_loc = stockByGradeLoc;
