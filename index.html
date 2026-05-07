@@ -1198,18 +1198,26 @@ function __recomputeKPIs() {
   D.cash_position.sales = D.kpi.total_sales;
   D.cash_position.peng_total = D.kpi.total_exp;
   D.cash_position.peng_riil = pengeluaranOperasi;
-  D.cash_position.stock_kg = stockKg;
+  // Stok Tertahan pakai baked-in opname 5 Mei (313.97 KG) untuk konsistensi cash position
+  // stockKg live disimpan terpisah sbg referensi diagnostic
+  D.cash_position.stock_kg_live_diagnostic = stockKg;
+  D.cash_position.stock_kg = D.meta.stock_calc_kg || 314;
   D.cash_position.avg_hpp = AVG_HPP_KG;
-  D.cash_position.stock_value = stockValue;
+  D.cash_position.stock_value_live_diagnostic = stockValue;
+  D.cash_position.stock_value = (D.cash_position.stock_kg) * AVG_HPP_KG;
   // Saldo Rekening Expected = Total Sales − Pengeluaran Operasi − Stok Tertahan
   // (cash LIKUID di bank, exclude inventory value yang belum terjual)
-  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi - stockValue;
+  // Saldo Rekening pakai stock_value baked-in (consistent dengan opname)
+  D.cash_position.cash_liquid = D.kpi.total_sales - pengeluaranOperasi - D.cash_position.stock_value;
   // Saldo Formal Total = Saldo Rekening + Stok Tertahan (total wealth)
   // Equivalent: Modal Awal + Sales − Total Pengeluaran (incl modal)
   D.cash_position.saldo_formal = MODAL_AWAL + D.kpi.total_sales - D.kpi.total_exp;
   // 2. Header KPI Stock GB Akhir
   if (!D.meta) D.meta = {};
-  D.meta.stock_calc_kg = Math.round(stockKg);
+  // STOCK GB AKHIR di header pakai HERO baked-in (opname 5 Mei 2026 = 313.97 KG)
+  // Live computed (stockKg) di-store sbg D.meta.stock_live_diagnostic untuk referensi internal.
+  D.meta.stock_live_diagnostic = Math.round(stockKg);
+  // D.meta.stock_calc_kg dibiarkan baked-in (313.97/314 KG opname authoritative)
   // 3. Accounting P&L
   if (!D.accounting) D.accounting = {};
   if (!D.accounting.pl) D.accounting.pl = {};
@@ -1231,8 +1239,8 @@ function __recomputeKPIs() {
   const fixedAssetNet = Math.max(0, investasiAlatGross - DEPRESIASI_7BLN);
   const totalAset = kas + stockValue + fixedAssetNet;
   D.accounting.neraca.kas = kas;
-  D.accounting.neraca.inventory_gb_kg = stockKg;
-  D.accounting.neraca.inventory_gb_value = stockValue;
+  D.accounting.neraca.inventory_gb_kg = D.cash_position.stock_kg;
+  D.accounting.neraca.inventory_gb_value = D.cash_position.stock_value;
   D.accounting.neraca.avg_hpp = AVG_HPP_KG;
   D.accounting.neraca.fixed_asset_gross = investasiAlatGross || 4122926;
   D.accounting.neraca.fixed_asset_net = fixedAssetNet || 3321246;
