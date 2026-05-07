@@ -962,6 +962,44 @@ function mergeApiData(apiResponse) {
     D.pengeluaran = __translatePengeluaran(data.pengeluaran);
   }
   // Sortasi & logbook keep as-is for now (different rendering schema)
+  // Recompute KPIs from fresh entries so header + cards update
+  __recomputeKPIs();
+}
+
+function __recomputeKPIs() {
+  if (!D.kpi) D.kpi = {};
+  // Sales totals
+  const gbSales = D.penjualan_gb || [];
+  const rbSales = D.penjualan_rb || [];
+  const sumField = (arr, f) => arr.reduce((s, r) => s + (+r[f] || 0), 0);
+  D.kpi.total_sales_gb = sumField(gbSales, 'sales');
+  D.kpi.total_profit_gb = sumField(gbSales, 'profit');
+  D.kpi.total_qty_gb = sumField(gbSales, 'qty');
+  D.kpi.total_sales_rb = sumField(rbSales, 'sales');
+  D.kpi.total_profit_rb = sumField(rbSales, 'profit');
+  D.kpi.total_qty_rb = sumField(rbSales, 'qty');
+  D.kpi.total_sales = D.kpi.total_sales_gb + D.kpi.total_sales_rb;
+  D.kpi.total_profit = D.kpi.total_profit_gb + D.kpi.total_profit_rb;
+  // Expenses
+  const exp = D.pengeluaran || [];
+  D.kpi.total_exp = sumField(exp, 'total');
+  // exp_by_kategori
+  const expByCat = {};
+  exp.forEach(e => {
+    const k = e.kategori || 'Uncategorized';
+    expByCat[k] = (expByCat[k] || 0) + (+e.total || 0);
+  });
+  D.exp_by_kategori = expByCat;
+  // cat_sales — rough mapping by produk prefix
+  const catSales = {'Green Bean': 0, 'Roast Bean': 0, 'Ground Coffee': 0};
+  gbSales.forEach(r => { catSales['Green Bean'] += (+r.sales || 0); });
+  rbSales.forEach(r => {
+    const k = (r.kode || '').toUpperCase();
+    if (k.startsWith('RB')) catSales['Roast Bean'] += (+r.sales || 0);
+    else if (k.startsWith('GC')) catSales['Ground Coffee'] += (+r.sales || 0);
+    else catSales['Roast Bean'] += (+r.sales || 0);
+  });
+  D.cat_sales = catSales;
 }
 
 async function refreshFromAPI() {
