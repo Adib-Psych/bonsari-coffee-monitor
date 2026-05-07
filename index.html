@@ -845,22 +845,111 @@ function getCachedData() {
   } catch(e) { return null; }
 }
 
-// Map API response to D structure
+// Map API response to D structure (with field translation)
+function __formatIdnDate(s) {
+  if (!s) return '';
+  if (typeof s === 'string' && s.match(/\d{1,2}\s+\w+\s+\d{4}/)) return s; // already formatted
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const m = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return d.getDate() + ' ' + m[d.getMonth()] + ' ' + d.getFullYear();
+  } catch(e) { return s; }
+}
+function __isoDate(s) {
+  if (!s) return '';
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return '';
+    return d.toISOString().split('T')[0];
+  } catch(e) { return ''; }
+}
+
+const __KODE_TO_PRODUK = {
+  'GBO': 'Green Bean Original','GBC': 'Green Bean Special','GBP': 'Green Bean Premium',
+  'GBL': 'Green Bean Lanang','GBS': 'Green Bean Sorted',
+  'RBP': 'Roast Bean Premium','RBC': 'Roast Bean Special','RBL': 'Roast Bean Lanang',
+  'GCR': 'Ground Coffee Regular','GCP': 'Ground Coffee Premium'
+};
+
+function __translateSalesGB(rows) {
+  return rows.map((r, i) => {
+    const harga = +r.harga_per_kg || 0;
+    const hpp = +r.hpp_per_kg || 0;
+    const qty = +r.qty || 0;
+    return {
+      no: i + 1,
+      tanggal: __isoDate(r.tanggal),
+      tanggal_raw: __formatIdnDate(r.tanggal),
+      pelanggan: r.customer || '',
+      produk: __KODE_TO_PRODUK[r.produk] || r.produk || '',
+      kode: r.produk || '',
+      hpp: hpp,
+      harga: harga,
+      qty: qty,
+      total_penjualan: +r.total_sales || (qty * harga),
+      total_hpp: +r.total_hpp || (qty * hpp),
+      margin: harga - hpp,
+      catatan: r.catatan || ''
+    };
+  });
+}
+
+function __translateSalesRB(rows) {
+  return rows.map((r, i) => {
+    const hppKg = +r.hpp_per_kg || 0;
+    const qty = +r.qty_kg || 0;
+    const hargaPack = +r.harga_per_pack || 0;
+    const packs = +r.packs || 1;
+    const hargaPerKg = qty > 0 ? (hargaPack * packs) / qty : 0;
+    return {
+      no: i + 1,
+      tanggal: __isoDate(r.tanggal),
+      tanggal_raw: __formatIdnDate(r.tanggal),
+      pelanggan: r.customer || '',
+      produk: __KODE_TO_PRODUK[r.produk] || r.produk || '',
+      kode: r.produk || '',
+      pack: r.pack || '1KG',
+      packs: packs,
+      hpp: hppKg,
+      harga: hargaPerKg,
+      qty: qty,
+      total_penjualan: +r.total_sales || (hargaPack * packs),
+      total_hpp: +r.total_hpp || (qty * hppKg),
+      margin: hargaPerKg - hppKg,
+      catatan: r.catatan || ''
+    };
+  });
+}
+
+function __translatePengeluaran(rows) {
+  return rows.map((r, i) => ({
+    no: i + 1,
+    tanggal: __isoDate(r.tanggal),
+    tanggal_raw: __formatIdnDate(r.tanggal),
+    deskripsi: r.deskripsi || '',
+    kategori: r.kategori || '',
+    tipe_akuntansi: '',
+    total: +r.total || 0,
+    sumber: r.supplier || '',
+    scope: '',
+    catatan: r.catatan || ''
+  }));
+}
+
 function mergeApiData(apiResponse) {
   if (!apiResponse?.data) return;
-  // Map sheet names to D keys
-  const map = {
-    'sales_gb': 'penjualan_gb',
-    'sales_rb': 'penjualan_rb',
-    'pengeluaran': 'pengeluaran',
-    'sortasi': 'sortasi_batches'
-  };
-  Object.entries(map).forEach(([apiKey, dKey]) => {
-    if (apiResponse.data[apiKey] && Array.isArray(apiResponse.data[apiKey]) && apiResponse.data[apiKey].length > 0) {
-      // Only override if API has actual data
-      D[dKey] = apiResponse.data[apiKey];
-    }
-  });
+  const data = apiResponse.data;
+  if (data.sales_gb && data.sales_gb.length > 0) {
+    D.penjualan_gb = __translateSalesGB(data.sales_gb);
+  }
+  if (data.sales_rb && data.sales_rb.length > 0) {
+    D.penjualan_rb = __translateSalesRB(data.sales_rb);
+  }
+  if (data.pengeluaran && data.pengeluaran.length > 0) {
+    D.pengeluaran = __translatePengeluaran(data.pengeluaran);
+  }
+  // Sortasi & logbook keep as-is for now (different rendering schema)
 }
 
 async function refreshFromAPI() {
