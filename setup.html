@@ -67,9 +67,9 @@
   </div>
   <div class="step-body">
     <ol>
-      <li>Buka <a href="https://sheets.new" target="_blank">https://sheets.new</a> (auto buat sheet baru)</li>
-      <li>Rename file di kiri atas jadi <strong>Bonsari_Coffee_Entry_Sync</strong></li>
-      <li>Sheet pertama biarin saja (tidak perlu rename — auto-created saat sync pertama)</li>
+      <li>✅ <strong>Sudah ada!</strong> Buka Google Sheets yang sudah disiapkan: <a href="https://docs.google.com/spreadsheets/d/18IuNt_x08EBgonBgXGZRz6esUnVBI14147iMvlLpgH8/edit" target="_blank">Bonsari_Coffee_Entry_Sync</a></li>
+      <li>Tidak perlu setup struktur tab — Apps Script akan auto-create 5 tab (Sales_GB, Sales_RB, Pengeluaran, Sortasi, Adjustments, Logbook, Customers) saat sync pertama</li>
+      <li>Pastikan login dengan akun yang punya akses (asroriadib@gmail.com atau bonsaricoffee@gmail.com)</li>
     </ol>
     <div class="info-box" style="margin-top:12px">
       💡 Sheets akan otomatis bikin 5 tab (Sales_GB, Sales_RB, Pengeluaran, Sortasi, Adjustments) saat entry pertama di-submit. Tidak perlu setup manual.
@@ -224,26 +224,39 @@
 
 <script>
 const APPS_SCRIPT_CODE = `/**
- * BONSARI COFFEE — Entry Dashboard Sync Webhook
+ * BONSARI COFFEE — Entry & Reading Dashboard Sync v2
+ *
+ * Apps Script handles:
+ * - POST: Receive entries from Entry Dashboard (write to sheets)
+ * - GET ?data=all: Return all data for Reading Dashboard
+ * - GET (no params): Health check
+ *
  * Last update: 7 Mei 2026
+ * Repo: https://github.com/adib-psych/bonsari-coffee-monitor
  */
 
+// =============== CONFIG ===============
 const SHEET_MAP = {
   'sales-gb': 'Sales_GB',
   'sales-rb': 'Sales_RB',
   'pengeluaran': 'Pengeluaran',
   'sortasi': 'Sortasi',
-  'adjustment': 'Adjustments'
+  'adjustment': 'Adjustments',
+  'logbook': 'Logbook',
+  'customers': 'Customers'
 };
 
 const SCHEMA = {
   'Sales_GB': ['id','created','tanggal','customer','customer_type','produk','qty','harga_per_kg','hpp_per_kg','total_sales','total_hpp','catatan','synced_at'],
   'Sales_RB': ['id','created','tanggal','customer','customer_type','produk','pack','packs','qty_kg','harga_per_pack','hpp_per_kg','total_sales','total_hpp','gb_equivalent','catatan','synced_at'],
   'Pengeluaran': ['id','created','tanggal','kategori','deskripsi','total','supplier','qty','harga_per_kg','catatan','synced_at'],
-  'Sortasi': ['id','created','pekerja','batch_status','tgl_ambil','bakalan','qty_input','tgl_setor','gbp','gbc','gbl','gbs','total_setor','susut','yield_pct','ongkos','synced_at'],
-  'Adjustments': ['id','created','tanggal','grade','direction','kg_masuk','kg_keluar','alasan','synced_at']
+  'Sortasi': ['id','created','pekerja','batch_status','tgl_ambil','bakalan','qty_input','tgl_setor','gbp','gbc','gbl','gbs','total_setor','susut','yield_pct','ongkos','ongkos_paid','synced_at'],
+  'Adjustments': ['id','created','tanggal','grade','direction','kg_masuk','kg_keluar','alasan','synced_at'],
+  'Logbook': ['no','tanggal','tipe','pelanggan','produk','grade','kg_masuk','kg_keluar','saldo_running','catatan'],
+  'Customers': ['name','type','added_date','status']
 };
 
+// =============== POST HANDLER (Entry Dashboard) ===============
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
@@ -263,13 +276,62 @@ function doPost(e) {
     const row = headers.map(h => entry[h] === undefined || entry[h] === null ? '' : entry[h]);
     sheet.appendRow(row);
 
+    // AUTO-SYNC: kalau Sortasi batch kembali, auto-create logbook movements
+    if (tab === 'sortasi' && entry.batch_status === 'kembali') {
+      autoSyncSortasiToLogbook(ss, entry);
+    }
+
     return jsonResponse({ success: true, id: entry.id, sheet: sheetName, row: sheet.getLastRow() });
   } catch (err) {
-    return jsonResponse({ success: false, error: err.message });
+    return jsonResponse({ success: false, error: err.message, stack: err.stack });
   }
 }
 
+// =============== GET HANDLER (Reading Dashboard + health) ===============
 function doGet(e) {
+  const params = e.parameter || {};
+
+  if (params.data === 'all') {
+    return getAllData();
+  }
+
+  if (params.data === 'health' || !params.data) {
+    return getHealthCheck();
+  }
+
+  // Specific sheet
+  if (SHEET_MAP[params.data] || Object.values(SHEET_MAP).includes(params.data)) {
+    return getSheetData(params.data);
+  }
+
+  return jsonResponse({ error: 'Unknown data type. Use ?data=all or ?data=health' });
+}
+
+function getAllData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const result = {
+    timestamp: new Date().toISOString(),
+    version: '2.0',
+    data: {}
+  };
+
+  Object.entries(SHEET_MAP).forEach(([key, sheetName]) => {
+    const sheet = ss.getSheetByName(sheetName);
+    result.data[sheetName.toLowerCase()] = sheet ? sheetToObjects(sheet) : [];
+  });
+
+  return jsonResponse(result);
+}
+
+function getSheetData(name) {
+  const sheetName = SHEET_MAP[name] || name;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return jsonResponse({ error: 'Sheet not found: ' + sheetName });
+  return jsonResponse({ sheet: sheetName, data: sheetToObjects(sheet) });
+}
+
+function getHealthCheck() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const stats = {};
   Object.values(SHEET_MAP).forEach(name => {
@@ -278,13 +340,82 @@ function doGet(e) {
   });
   return jsonResponse({
     status: 'live',
-    service: 'Bonsari Coffee Entry Sync',
-    version: '1.0',
+    service: 'Bonsari Coffee Sync',
+    version: '2.0',
     timestamp: new Date().toISOString(),
     entries_count: stats
   });
 }
 
+function sheetToObjects(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const lastCol = sheet.getLastColumn();
+  const values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const headers = values[0].map(h => String(h).trim());
+  return values.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => {
+      let val = row[i];
+      if (val instanceof Date) val = val.toISOString();
+      obj[h] = val;
+    });
+    return obj;
+  });
+}
+
+// =============== AUTO-SYNC: Sortasi → Logbook ===============
+function autoSyncSortasiToLogbook(ss, sortasi) {
+  let lb = ss.getSheetByName('Logbook');
+  if (!lb) {
+    lb = ss.insertSheet('Logbook');
+    setupHeaders(lb, 'Logbook');
+  }
+  if (lb.getLastRow() === 0) setupHeaders(lb, 'Logbook');
+
+  // Get next no
+  const lastRow = lb.getLastRow();
+  let nextNo = 1;
+  let lastSaldo = 313.97; // baseline saldo per memory
+  if (lastRow > 1) {
+    const lastVals = lb.getRange(lastRow, 1, 1, 9).getValues()[0];
+    nextNo = (parseInt(lastVals[0]) || 0) + 1;
+    lastSaldo = parseFloat(lastVals[8]) || lastSaldo;
+  }
+
+  const tgl = formatDate(sortasi.tgl_setor || sortasi.tgl_ambil);
+  const totalSetor = parseFloat(sortasi.total_setor) || 0;
+  const qtyInput = parseFloat(sortasi.qty_input) || 0;
+  const susut = parseFloat(sortasi.susut) || 0;
+
+  // Movement 1: GBO out (input bakalan masuk sortir = keluar dari stock GBO)
+  if (qtyInput > 0) {
+    const newSaldo = lastSaldo - qtyInput;
+    lb.appendRow([
+      nextNo, tgl, 'Sortir Out', sortasi.pekerja, sortasi.bakalan, 'GBO',
+      0, qtyInput, newSaldo, \`Sortasi batch \${sortasi.id} → \${sortasi.pekerja}\`
+    ]);
+    lastSaldo = newSaldo;
+    nextNo++;
+  }
+
+  // Movement 2: Sorted grades back (output sortir = masuk stock)
+  if (totalSetor > 0) {
+    const newSaldo = lastSaldo + totalSetor;
+    const grades = [];
+    if (sortasi.gbp > 0) grades.push(\`GBP \${sortasi.gbp}\`);
+    if (sortasi.gbc > 0) grades.push(\`GBC \${sortasi.gbc}\`);
+    if (sortasi.gbl > 0) grades.push(\`GBL \${sortasi.gbl}\`);
+    if (sortasi.gbs > 0) grades.push(\`GBS \${sortasi.gbs}\`);
+
+    lb.appendRow([
+      nextNo, tgl, 'Sortir In', sortasi.pekerja, 'Mixed grade', 'Mixed',
+      totalSetor, 0, newSaldo, \`Output: \${grades.join(' + ')} · susut \${susut.toFixed(2)} KG\`
+    ]);
+  }
+}
+
+// =============== HELPERS ===============
 function setupHeaders(sheet, sheetName) {
   const headers = SCHEMA[sheetName];
   if (!headers) return;
@@ -292,13 +423,27 @@ function setupHeaders(sheet, sheetName) {
   const r = sheet.getRange(1, 1, 1, headers.length);
   r.setBackground('#4A2C40').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
   sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, headers.length);
+}
+
+function formatDate(s) {
+  if (!s) return '';
+  if (typeof s === 'string') {
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    const m = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    return \`\${d.getDate()} \${m[d.getMonth()]} \${d.getFullYear()}\`;
+  }
+  return String(s);
 }
 
 function jsonResponse(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
-function testWebhook() {
+// =============== TEST FUNCTIONS ===============
+function testWebhookPOST() {
   const result = doPost({
     postData: {
       contents: JSON.stringify({
@@ -309,19 +454,27 @@ function testWebhook() {
           tanggal: '2026-05-07',
           customer: 'TEST CUSTOMER',
           customer_type: 'Reseller',
-          produk: 'GBP',
-          qty: 1,
-          harga_per_kg: 93000,
-          hpp_per_kg: 74341,
-          total_sales: 93000,
-          total_hpp: 74341,
+          produk: 'GBP', qty: 1,
+          harga_per_kg: 93000, hpp_per_kg: 74341,
+          total_sales: 93000, total_hpp: 74341,
           catatan: 'Test from Apps Script'
         }
       })
     }
   });
   Logger.log(result.getContent());
-}`;
+}
+
+function testGetAll() {
+  const result = doGet({ parameter: { data: 'all' } });
+  Logger.log(result.getContent().substring(0, 500));
+}
+
+function testHealthCheck() {
+  const result = doGet({ parameter: {} });
+  Logger.log(result.getContent());
+}
+`;
 
 document.getElementById('apps-script-code').textContent = APPS_SCRIPT_CODE;
 
