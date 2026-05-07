@@ -797,6 +797,19 @@ footer a{color:var(--steel);text-decoration:none}
     <!-- Grade cards grid -->
     <div id="lb-hero-grade-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:18px"></div>
     
+    <!-- ✨ LIVE STOCK PER GRADE (computed dari sortasi flow) -->
+    <div style="background:#FFF7ED;border:2px dashed #E8975A;border-radius:10px;padding:14px;margin-bottom:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div style="font-weight:700;color:#7A4A1F;font-size:14px">⚡ LIVE Stock per Grade — Computed</div>
+          <div style="font-size:11px;color:#A06A2D;margin-top:2px">Real-time dari Pembelian − Sortasi flow − Sales · Compare ke opname HERO di atas</div>
+        </div>
+        <div id="live-stock-total-badge" style="background:#fff;border:1px solid #E8975A;padding:6px 12px;border-radius:6px;font-weight:700;color:#7A4A1F;font-size:14px">— KG</div>
+      </div>
+      <div id="live-stock-grade-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px"></div>
+    </div>
+
+    
     <!-- Flow diagram -->
     <div style="background:#F8FAF6;border-radius:8px;padding:14px 18px;border:1px solid #D9E2D2">
       <div style="font-weight:700;font-size:13px;color:#2D5640;margin-bottom:8px">🔄 Aliran Sortasi (Sortir → Stock)</div>
@@ -872,6 +885,39 @@ footer a{color:var(--steel);text-decoration:none}
         <div class="container" style="height:240px"><canvas id="ch-sort-bar"></canvas></div>
       </div>
     </div>
+  </div>
+
+  <!-- ✨ WORKER PAYMENT TRACKING SECTION -->
+  <div class="section">
+    <h2>👥 Worker Payment Tracking <span class="badge" id="worker-pay-summary">—</span></h2>
+    <div class="note"><strong>Tracking ongkos sortasi:</strong> Otomatis hitung Rp 3.000/KG (excl. GBS). Kolom "Outstanding" = belum dibayar, klik tombol untuk mark paid.</div>
+    
+    <!-- Total Outstanding KPI -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:14px">
+      <div class="kpi" style="background:#FCEBEB;border:2px solid #B85C5C">
+        <div class="label" style="color:#7A2A2A;font-weight:700">💸 Total Outstanding</div>
+        <div class="value" id="worker-total-outstanding" style="color:#B85C5C;font-size:20px">—</div>
+        <div class="sub" id="worker-total-outstanding-sub">Belum dibayar</div>
+      </div>
+      <div class="kpi" style="background:#DAEBE0;border:2px solid #5B9279">
+        <div class="label" style="color:#2D5640;font-weight:700">✅ Total Paid</div>
+        <div class="value" id="worker-total-paid" style="color:#2D5640;font-size:20px">—</div>
+        <div class="sub" id="worker-total-paid-sub">Sudah dibayar</div>
+      </div>
+      <div class="kpi" style="background:#E0EBF5;border:2px solid #3A6EA5">
+        <div class="label" style="color:#1B2A41;font-weight:700">🏋️ GB di Pekerja</div>
+        <div class="value" id="worker-gb-di-pekerja" style="color:#3A6EA5;font-size:20px">—</div>
+        <div class="sub" id="worker-gb-di-pekerja-sub">Belum kembali</div>
+      </div>
+      <div class="kpi" style="background:#FCE5D2;border:2px solid #E8975A">
+        <div class="label" style="color:#7A4A1F;font-weight:700">📊 Total Ongkos</div>
+        <div class="value" id="worker-total-ongkos" style="color:#E8975A;font-size:20px">—</div>
+        <div class="sub" id="worker-total-ongkos-sub">Outstanding + Paid</div>
+      </div>
+    </div>
+
+    <!-- Per-worker cards -->
+    <div id="worker-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px"></div>
   </div>
   
   <div class="section">
@@ -1186,6 +1232,71 @@ function __recomputeKPIs() {
   D.accounting.reclass_totals.investment = inv;
   D.accounting.reclass_totals.hpp_matched = hppMatched;
   D.accounting.reclass_totals.period_opex = opexPeriod;
+
+  // === SORTASI WORKER PAYMENT TRACKING (live) ===
+  const ONGKOS_RATE = 3000;
+  const sortasiBatches = (window.__bonsariCachedData?.data?.sortasi || D.sortasi_batches || []);
+  const workerStats = {};
+  let totalGbDiPekerja = 0;
+  sortasiBatches.forEach(s => {
+    const w = s.pekerja || s.worker || 'Unknown';
+    if (!workerStats[w]) {
+      workerStats[w] = { pekerja: w, total_batch: 0, total_input_kg: 0, total_setor_kg: 0,
+        total_ongkos: 0, total_paid: 0, outstanding: 0, pending_batch: 0, pending_kg: 0,
+        unpaid_batch: 0, paid_batch: 0, total_gbp: 0, total_gbc: 0, total_gbl: 0, total_gbs: 0,
+        avg_yield: 0 };
+    }
+    const ws = workerStats[w];
+    ws.total_batch++;
+    ws.total_input_kg += +s.qty_input || 0;
+    ws.total_setor_kg += +s.total_setor || 0;
+    ws.total_gbp += +s.gbp || 0;
+    ws.total_gbc += +s.gbc || 0;
+    ws.total_gbl += +s.gbl || 0;
+    ws.total_gbs += +s.gbs || 0;
+    let ongkos = +s.ongkos || 0;
+    if (!ongkos && s.total_setor) {
+      ongkos = ((+s.total_setor || 0) - (+s.gbs || 0)) * ONGKOS_RATE;
+    }
+    ws.total_ongkos += ongkos;
+    const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
+    if (isPaid) { ws.total_paid += ongkos; ws.paid_batch++; }
+    else { ws.outstanding += ongkos; ws.unpaid_batch++; }
+    const hasNotSetor = !s.tgl_setor || !s.total_setor || +s.total_setor === 0;
+    if (hasNotSetor && +s.qty_input > 0) {
+      ws.pending_batch++;
+      ws.pending_kg += +s.qty_input;
+      totalGbDiPekerja += +s.qty_input;
+    }
+  });
+  Object.values(workerStats).forEach(ws => {
+    ws.avg_yield = ws.total_input_kg > 0 ? (ws.total_setor_kg / ws.total_input_kg * 100) : 0;
+  });
+  D.worker_stats = workerStats;
+  D.gb_di_pekerja = totalGbDiPekerja;
+  D.total_outstanding_ongkos = Object.values(workerStats).reduce((a,w) => a + w.outstanding, 0);
+  D.total_paid_ongkos = Object.values(workerStats).reduce((a,w) => a + w.total_paid, 0);
+
+  // === LIVE STOCK PER GRADE (computed from sortasi flow) ===
+  const stockGrade = { GBO: 0, GBP: 0, GBC: 0, GBL: 0, GBS: 0 };
+  stockGrade.GBO = (D.logbook?.aggregates?.total_pembelian_kg || 0);
+  sortasiBatches.forEach(s => {
+    stockGrade.GBO -= +s.qty_input || 0;
+    stockGrade.GBP += +s.gbp || 0;
+    stockGrade.GBC += +s.gbc || 0;
+    stockGrade.GBL += +s.gbl || 0;
+    stockGrade.GBS += +s.gbs || 0;
+  });
+  (D.penjualan_gb || []).forEach(r => {
+    const kode = (r.kode || '').toUpperCase();
+    if (stockGrade[kode] !== undefined) stockGrade[kode] -= +r.qty || 0;
+  });
+  (D.penjualan_rb || []).forEach(r => {
+    const consumed = (+r.qty || 0) * 1.25;
+    stockGrade.GBP -= consumed;
+  });
+  D.stock_per_grade_live = stockGrade;
+  D.stock_total_live = Math.max(0, Object.values(stockGrade).reduce((a,b)=>a+b,0));
 }
 
 async function refreshFromAPI() {
@@ -1556,6 +1667,115 @@ document.getElementById('sort-yield-cards').innerHTML = `
   <div class="kpi warning"><div class="label">Susut</div><div class="value" style="color:var(--danger)">${ST.susut_pct.toFixed(1)}%</div><div class="sub">${fmtN(ST.susut,2)} KG loss</div></div>
   <div class="kpi accent"><div class="label">Total Ongkos</div><div class="value" style="font-size:18px">${fmt(ST.ongkos)}</div></div>
 `;
+
+// === Worker Payment Cards Renderer ===
+(function renderWorkerPayment(){
+  const ws = D.worker_stats || {};
+  const workers = Object.values(ws);
+  if (workers.length === 0) return;
+  // Update header summary + KPI cards
+  const totalOutstanding = D.total_outstanding_ongkos || 0;
+  const totalPaid = D.total_paid_ongkos || 0;
+  const gbDiPekerja = D.gb_di_pekerja || 0;
+  const totalOngkos = totalOutstanding + totalPaid;
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('worker-pay-summary', workers.length + ' pekerja · Outstanding ' + fmt(totalOutstanding));
+  setText('worker-total-outstanding', fmt(totalOutstanding));
+  setText('worker-total-outstanding-sub', workers.reduce((s,w) => s+w.unpaid_batch, 0) + ' batch belum dibayar');
+  setText('worker-total-paid', fmt(totalPaid));
+  setText('worker-total-paid-sub', workers.reduce((s,w) => s+w.paid_batch, 0) + ' batch lunas');
+  setText('worker-gb-di-pekerja', fmtN(gbDiPekerja, 1) + ' KG');
+  setText('worker-gb-di-pekerja-sub', workers.filter(w=>w.pending_batch>0).length + ' pekerja masih ada batch jalan');
+  setText('worker-total-ongkos', fmt(totalOngkos));
+  setText('worker-total-ongkos-sub', 'Lifetime cumulative');
+  // Render per-worker cards
+  const sortedWorkers = workers.sort((a,b) => b.outstanding - a.outstanding);
+  document.getElementById('worker-cards').innerHTML = sortedWorkers.map(w => {
+    const paidPct = w.total_ongkos > 0 ? (w.total_paid / w.total_ongkos * 100) : 0;
+    const yieldColor = w.avg_yield >= 95 ? '#5B9279' : (w.avg_yield >= 85 ? '#E8975A' : '#B85C5C');
+    const outstandingColor = w.outstanding > 0 ? '#B85C5C' : '#5B9279';
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;border-left:4px solid #3A6EA5">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#1B2A41">👷 ${w.pekerja}</div>
+          <div style="font-size:11px;color:var(--muted)">${w.total_batch} batch · ${fmtN(w.total_input_kg,1)} KG input · yield <span style="color:${yieldColor};font-weight:600">${w.avg_yield.toFixed(1)}%</span></div>
+        </div>
+        ${w.pending_kg > 0 ? `<div style="background:#FCE5D2;border:1px solid #E8975A;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:600;color:#7A4A1F">🏋️ ${fmtN(w.pending_kg,1)} KG di tangan</div>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:#F5F7FA;border-radius:6px;padding:8px">
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">Total Ongkos</div>
+          <div style="font-size:13px;font-weight:700;color:#1B2A41">${fmt(w.total_ongkos)}</div>
+        </div>
+        <div style="background:#DAEBE0;border-radius:6px;padding:8px">
+          <div style="font-size:10px;color:#2D5640;font-weight:600;text-transform:uppercase">✅ Paid</div>
+          <div style="font-size:13px;font-weight:700;color:#2D5640">${fmt(w.total_paid)}</div>
+          <div style="font-size:10px;color:#5B9279">${w.paid_batch} batch</div>
+        </div>
+        <div style="background:#FCEBEB;border-radius:6px;padding:8px">
+          <div style="font-size:10px;color:#7A2A2A;font-weight:600;text-transform:uppercase">💸 Outstanding</div>
+          <div style="font-size:13px;font-weight:700;color:#B85C5C">${fmt(w.outstanding)}</div>
+          <div style="font-size:10px;color:#B85C5C">${w.unpaid_batch} batch</div>
+        </div>
+      </div>
+      <!-- Progress bar -->
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted);margin-bottom:3px">
+          <span>Payment progress</span><span>${paidPct.toFixed(1)}% paid</span>
+        </div>
+        <div style="background:#EDF2F7;border-radius:6px;height:6px;overflow:hidden">
+          <div style="background:#5B9279;height:100%;width:${Math.min(paidPct,100)}%;transition:width 0.3s"></div>
+        </div>
+      </div>
+      ${w.outstanding > 0 ? `<button onclick="bayarWorkerAll('${w.pekerja.replace(/'/g, '&apos;')}', ${w.outstanding})" style="width:100%;background:#3A6EA5;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer">💸 Bayar Semua Outstanding (${fmt(w.outstanding)})</button>` : '<div style="text-align:center;padding:6px;font-size:11px;color:#5B9279;font-weight:600">✅ Semua batch sudah dibayar</div>'}
+    </div>`;
+  }).join('');
+})();
+
+// === LIVE Stock per Grade Renderer ===
+(function renderLiveStockGrade(){
+  const sg = D.stock_per_grade_live || {};
+  const total = D.stock_total_live || 0;
+  const totalBadge = document.getElementById('live-stock-total-badge');
+  if (totalBadge) totalBadge.textContent = fmtN(total, 1) + ' KG total';
+  const grid = document.getElementById('live-stock-grade-grid');
+  if (!grid) return;
+  const grades = [
+    {code:'GBO', name:'Original', color:'#7A4A1F', bg:'#FCE5D2'},
+    {code:'GBP', name:'Premium', color:'#3A6EA5', bg:'#E0EBF5'},
+    {code:'GBC', name:'Special', color:'#888780', bg:'#F1EFE8'},
+    {code:'GBL', name:'Lanang', color:'#5B9279', bg:'#DAEBE0'},
+    {code:'GBS', name:'Sorted', color:'#B85C5C', bg:'#FCEBEB'}
+  ];
+  grid.innerHTML = grades.map(g => {
+    const kg = sg[g.code] || 0;
+    const pctTotal = total > 0 ? (kg/total*100) : 0;
+    return `<div style="background:${g.bg};border:1px solid ${g.color};border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:11px;color:${g.color};font-weight:700;text-transform:uppercase">${g.code}</div>
+      <div style="font-size:9px;color:${g.color};opacity:0.7">${g.name}</div>
+      <div style="font-size:18px;font-weight:700;color:${g.color};margin-top:4px">${fmtN(Math.max(0,kg), 1)}</div>
+      <div style="font-size:10px;color:${g.color};opacity:0.8">KG · ${pctTotal.toFixed(1)}%</div>
+    </div>`;
+  }).join('');
+})();
+
+// === Bayar Worker All — POST to Apps Script ===
+window.bayarWorkerAll = async function(pekerja, totalAmount) {
+  if (!confirm('💸 Bayar semua ongkos outstanding untuk ' + pekerja + '?\n\nTotal: ' + fmt(totalAmount) + '\n\nTindakan ini akan mark semua batch unpaid sebagai PAID di Google Sheet.')) return;
+  const apiUrl = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
+  try {
+    await fetch(apiUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {'Content-Type': 'text/plain'},
+      body: JSON.stringify({ action: 'bulk_pay_worker', pekerja: pekerja })
+    });
+    alert('✅ Pembayaran ' + pekerja + ' (' + fmt(totalAmount) + ') sudah di-record!\n\nDashboard akan refresh otomatis dalam 10 detik...');
+    setTimeout(() => location.reload(), 10000);
+  } catch (e) {
+    alert('⚠️ Error: ' + e.message);
+  }
+};
 
 // Output pie chart
 new Chart(document.getElementById('ch-sort-pie'),{
