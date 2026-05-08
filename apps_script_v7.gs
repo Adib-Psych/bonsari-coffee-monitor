@@ -374,9 +374,9 @@ function handleUpdatePayment_(ss, body) {
       if (c > 0) sortasiSheet.getRange(row, c).setValue(u.ongkos);
     }
   });
-  // Auto-create Pengeluaran row if any paid
+  // Auto-create Pengeluaran row if any paid (skip if body.skip_pengeluaran=true for historical retroactive marking)
   let pengeluaranRefId = null;
-  if (totalNewlyPaid > 0) {
+  if (totalNewlyPaid > 0 && !body.skip_pengeluaran) {
     const paidDate = (updates.find(u => u.paid_date) || {}).paid_date || new Date().toISOString().slice(0,10);
     pengeluaranRefId = createPengeluaranSortir_(ss, {
       tanggal: paidDate,
