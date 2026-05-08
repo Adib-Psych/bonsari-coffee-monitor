@@ -1014,10 +1014,15 @@ async function fetchOutstandingBatches(){
     const r = await fetch(url + '?data=all', { method:'GET' });
     const j = await r.json();
     const sortasi = j?.data?.sortasi || [];
+    // Strict filter: only batches that ARE 'kirim' status AND have NOT been returned yet
+    // Exclude: 'kembali' (sudah kembali), 'adjustment' (manual reconciliation), and rows with output values
     const outstanding = sortasi.filter(s => {
-      const status = (s.batch_status || '').toLowerCase();
+      const status = (s.batch_status || '').toString().toLowerCase().trim();
       const totalSetor = parseFloat(s.total_setor || 0);
-      return status === 'kirim' || (!s.tgl_setor || totalSetor === 0);
+      const hasOutput = totalSetor > 0 || parseFloat(s.gbp || 0) > 0 || parseFloat(s.gbc || 0) > 0 || parseFloat(s.gbl || 0) > 0 || parseFloat(s.gbs || 0) > 0;
+      const qtyInput = parseFloat(s.qty_input || 0);
+      // Must be 'kirim' status, must have qty_input > 0, must NOT have any output
+      return status === 'kirim' && qtyInput > 0 && !hasOutput;
     });
     if(outstanding.length === 0){
       select.innerHTML = '<option value="">⚠ Tidak ada batch outstanding</option>';
