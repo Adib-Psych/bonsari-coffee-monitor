@@ -96,6 +96,11 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.cleanup_orphans === '1') {
       cleanupOrphanMovements();
     }
+    // Audit & auto-fix: hit /exec?audit_fix=1 to recalc all kembali batches'
+    // yield_pct (decimal), ongkos (auto-calc if missing), susut (qty-setor)
+    if (e && e.parameter && e.parameter.audit_fix === '1') {
+      auditFixBatchData();
+    }
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
@@ -276,7 +281,9 @@ function handleSortasiKembali_(ss, body) {
   const gbs = parseFloat(body.gbs || 0);
   const totalSetor = gbp + gbc + gbl + gbs;
   const susut = qtyInput - totalSetor;
-  const yieldPct = qtyInput > 0 ? (totalSetor / qtyInput * 100) : 0;
+  // V7.9: store yield_pct as DECIMAL (e.g., 1.035 = 103.5%) — consistent with historical convention.
+  // Reading Dashboard renders as (yield_pct * 100).toFixed(1)+'%'
+  const yieldPct = qtyInput > 0 ? (totalSetor / qtyInput) : 0;
   const ongkos = parseFloat(body.ongkos || ((totalSetor - gbs) * ONGKOS_RATE_PER_KG));
   // Update Sortasi row
   const updates = {
@@ -719,6 +726,54 @@ function migrateExistingSortasi() {
   });
   Logger.log('Migrated ' + migrated + ' Sortasi batches to GB_Movement');
   return { ok: true, migrated: migrated };
+}
+
+/**
+ * AUDIT & AUTO-FIX: Walk Sortasi sheet, recompute yield_pct (DECIMAL), ongkos, susut
+ * for all kembali batches. Normalize inconsistent data.
+ */
+function auditFixBatchData() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(SHEETS.SORTASI);
+  if (!sheet) return { ok:false };
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok:true, fixed:0 };
+  const data = sheet.getRange(2,1,lastRow-1,headers.length).getValues();
+  const col = (name) => headers.indexOf(name);
+  const cQty = col('qty_input'), cSetor = col('total_setor'), cYield = col('yield_pct');
+  const cOngkos = col('ongkos'), cSusut = col('susut'), cGbs = col('gbs'), cStatus = col('batch_status');
+  let fixed = 0;
+  data.forEach((row, idx) => {
+    const sheetRow = idx + 2;
+    const qty = parseFloat(row[cQty]) || 0;
+    const setor = parseFloat(row[cSetor]) || 0;
+    if (qty <= 0 || setor <= 0) return; // not a kembali with data
+    const gbs = parseFloat(row[cGbs]) || 0;
+    // Normalize yield_pct to DECIMAL form
+    const correctYield = setor / qty;
+    const currentYield = parseFloat(row[cYield]) || 0;
+    if (Math.abs(currentYield - correctYield) > 0.001) {
+      sheet.getRange(sheetRow, cYield+1).setValue(correctYield);
+      fixed++;
+    }
+    // Recompute ongkos if missing
+    const correctOngkos = (setor - gbs) * ONGKOS_RATE_PER_KG;
+    const currentOngkos = parseFloat(row[cOngkos]) || 0;
+    if (currentOngkos === 0 && correctOngkos > 0) {
+      sheet.getRange(sheetRow, cOngkos+1).setValue(correctOngkos);
+      fixed++;
+    }
+    // Recompute susut if empty
+    const correctSusut = qty - setor;
+    const currentSusutRaw = row[cSusut];
+    if (currentSusutRaw === '' || currentSusutRaw === null || currentSusutRaw === undefined) {
+      sheet.getRange(sheetRow, cSusut+1).setValue(correctSusut);
+      fixed++;
+    }
+  });
+  Logger.log('Audit & fix complete: ' + fixed + ' field(s) updated');
+  return { ok:true, fixed: fixed };
 }
 
 /**
