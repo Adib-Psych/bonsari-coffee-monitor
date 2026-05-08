@@ -91,6 +91,11 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.reset === '1') {
       resetMovementsKeepBaseline();
     }
+    // Cleanup orphan movements: hit /exec?cleanup_orphans=1 to delete movements
+    // where ref_id doesn't exist in Sortasi sheet (e.g., batch was deleted manually)
+    if (e && e.parameter && e.parameter.cleanup_orphans === '1') {
+      cleanupOrphanMovements();
+    }
     const data = {
       gb_movements: readSheet_(ss, SHEETS.GB_MOVEMENT),
       sortasi:      readSheet_(ss, SHEETS.SORTASI),
@@ -714,6 +719,45 @@ function migrateExistingSortasi() {
   });
   Logger.log('Migrated ' + migrated + ' Sortasi batches to GB_Movement');
   return { ok: true, migrated: migrated };
+}
+
+/**
+ * CLEANUP: Delete movements where ref_id is set but doesn't exist in Sortasi sheet.
+ * Useful when batches are manually deleted from Sortasi but movements remain orphan.
+ */
+function cleanupOrphanMovements() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const movSheet = ss.getSheetByName(SHEETS.GB_MOVEMENT);
+  const sortasiSheet = ss.getSheetByName(SHEETS.SORTASI);
+  if (!movSheet || !sortasiSheet) return { ok:false, err:'sheets missing' };
+  // Get all valid batch IDs from Sortasi
+  const sortHeaders = sortasiSheet.getRange(1,1,1,sortasiSheet.getLastColumn()).getValues()[0];
+  const sortIdCol = sortHeaders.indexOf('id');
+  const validIds = new Set();
+  if (sortasiSheet.getLastRow() > 1) {
+    const sortIds = sortasiSheet.getRange(2, sortIdCol+1, sortasiSheet.getLastRow()-1, 1).getValues();
+    sortIds.forEach(r => { if (r[0]) validIds.add(r[0]); });
+  }
+  // Walk movements, find orphans (ref_id set but not in validIds, AND source is sortasi-related)
+  const movHeaders = movSheet.getRange(1,1,1,movSheet.getLastColumn()).getValues()[0];
+  const refCol = movHeaders.indexOf('ref_id');
+  const sourceCol = movHeaders.indexOf('source');
+  const lastRow = movSheet.getLastRow();
+  if (lastRow < 2) return { ok:true, deleted:0 };
+  const data = movSheet.getRange(2, 1, lastRow-1, movHeaders.length).getValues();
+  const orphanRows = [];
+  for (let i = data.length - 1; i >= 0; i--) {
+    const refId = data[i][refCol];
+    const source = (data[i][sourceCol] || '').toString();
+    // Only check sortasi_keluar / sortasi_kembali movements (have ref_id pointing to Sortasi batches)
+    if (refId && /^sortasi_/.test(source) && !validIds.has(refId)) {
+      orphanRows.push(i + 2);
+    }
+  }
+  // Delete in bottom-up order
+  orphanRows.sort((a,b) => b - a).forEach(rowIdx => movSheet.deleteRow(rowIdx));
+  Logger.log('Cleanup orphan movements: ' + orphanRows.length + ' rows deleted');
+  return { ok:true, deleted: orphanRows.length };
 }
 
 /**
