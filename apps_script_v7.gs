@@ -112,7 +112,8 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  const lock = LockService.getDocumentLock();
+  // Use getScriptLock (works in standalone scripts; getDocumentLock returns null)
+  const lock = LockService.getScriptLock();
   lock.waitLock(15000);
   try {
     const body = JSON.parse(e.postData.contents);
