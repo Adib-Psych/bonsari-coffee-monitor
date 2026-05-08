@@ -751,8 +751,11 @@ async function refreshWorkerStats() {
       const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
       if (isPaid) stats[w].paid += ongkos;
       else stats[w].outstanding += ongkos;
-      const noSetor = !s.tgl_setor || !s.total_setor || +s.total_setor === 0;
-      if (noSetor && +s.qty_input > 0) {
+      // V7.10 fix: a batch is "pending kembali" ONLY if status='kirim' (explicit).
+      // Don't count batches with status='kembali' even if total_setor=0 (those are archived/susut-100%).
+      const status = (s.batch_status || '').toString().toLowerCase().trim();
+      const isPending = (status === 'kirim') || (status === '' && +s.qty_input > 0 && +s.total_setor === 0 && !s.tgl_setor);
+      if (isPending && +s.qty_input > 0) {
         stats[w].pending_kg += +s.qty_input;
         totalGbDiPekerja += +s.qty_input;
       }

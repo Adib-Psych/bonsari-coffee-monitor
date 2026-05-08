@@ -1351,9 +1351,11 @@ function __recomputeKPIs() {
     const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
     if (isPaid) { ws.total_paid += ongkos; ws.paid_batch++; }
     else { ws.outstanding += ongkos; ws.unpaid_batch++; }
-    // V7: pending_kg now from gb_di_pekerja_per_worker (movement-based, more accurate)
-    const isKirimUnreturned = (s.batch_status === 'kirim') ||
-                              (!s.tgl_setor || !s.total_setor || +s.total_setor === 0);
+    // V7.10 fix: a batch is "pending kembali" ONLY if status='kirim' (explicit).
+    // Don't count batches with status='kembali' even if total_setor=0 (those are archived/susut-100%).
+    const status = (s.batch_status || '').toString().toLowerCase().trim();
+    const isKirimUnreturned = (status === 'kirim') ||
+                              (status === '' && !s.tgl_setor && +s.qty_input > 0 && +s.total_setor === 0);
     if (isKirimUnreturned && +s.qty_input > 0) {
       ws.pending_batch++;
       ws.pending_kg = D.gb_di_pekerja_per_worker?.[w] || ws.pending_kg + (+s.qty_input);
