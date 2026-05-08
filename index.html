@@ -163,7 +163,7 @@ footer a{color:var(--steel);text-decoration:none}
   <div class="kpi">
     <div class="label">Stock GB Akhir</div>
     <div class="value" id="kpi-stock">—</div>
-    <div class="sub">Reconciled 5 Mei 2026 · 112 movements</div>
+    <div class="sub" id="kpi-stock-sub">Reconciled 5 Mei 2026</div>
   </div>
   <div class="kpi warning">
     <div class="label">Pengeluaran Operasi</div>
@@ -1458,7 +1458,9 @@ document.getElementById('kpi-profit').textContent = fmt(k.total_profit);
 document.getElementById('kpi-margin').textContent = (margin*100).toFixed(2)+'%';
 document.getElementById('kpi-bep').textContent = (bep*100).toFixed(1)+'%';
 document.getElementById('kpi-bep-bar').style.width = Math.min(bep*100,100)+'%';
-document.getElementById('kpi-stock').textContent = D.meta.stock_calc_kg+' KG';
+document.getElementById('kpi-stock').textContent = fmtN(D.meta.stock_calc_kg, 2) + ' KG';
+const _kpiStockSub = document.getElementById('kpi-stock-sub');
+if (_kpiStockSub) _kpiStockSub.textContent = 'Live · baseline 5 Mei 2026 · ' + (D.gb_movements?.length || 0) + ' movements';
 // Pengeluaran Operasi = Total Pengeluaran − Modal Awal (post-modal expenses only)
 const modalAwal = 77750000;
 const pengeluaranOperasi = k.total_exp - modalAwal;
