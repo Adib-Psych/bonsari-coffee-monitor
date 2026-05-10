@@ -166,6 +166,9 @@ function doPost(e) {
       case 'submit_pengeluaran':
         result = handlePengeluaran_(ss, body);
         break;
+      case 'update_sales_row':
+        result = handleUpdateSalesRow_(ss, body);
+        break;
       default:
         result = { ok: false, error: 'Unknown action: ' + action };
     }
@@ -534,6 +537,37 @@ function handleAppendRow_(ss, sheetName, body) {
   }
   formatAndSortAll_(ss);
   return { ok: true, message: sheetName + ' row added' };
+}
+
+/**
+ * Update one sales row (Sales_GB or Sales_RB) by id with arbitrary field updates.
+ * Body: { sheet: 'Sales_GB' | 'Sales_RB', row_id, updates: {pack, packs, harga_per_pack, total_sales, ...} }
+ */
+function handleUpdateSalesRow_(ss, body) {
+  const sheetName = body.sheet || SHEETS.SALES_RB;
+  const rowId = body.row_id || body.id;
+  const updates = body.updates || {};
+  if (!rowId) return { ok:false, error:'row_id wajib' };
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return { ok:false, error: sheetName + ' not found' };
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  const idCol = headers.indexOf('id');
+  if (idCol < 0) return { ok:false, error: 'id column not found in ' + sheetName };
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok:false, error: 'sheet empty' };
+  const ids = sheet.getRange(2, idCol+1, lastRow-1, 1).getValues().map(r => r[0]);
+  const idx = ids.indexOf(rowId);
+  if (idx < 0) return { ok:false, error: 'row_id ' + rowId + ' not found' };
+  const sheetRow = idx + 2;
+  let updatedFields = 0;
+  Object.keys(updates).forEach(field => {
+    const c = headers.indexOf(field);
+    if (c >= 0) {
+      sheet.getRange(sheetRow, c+1).setValue(updates[field]);
+      updatedFields++;
+    }
+  });
+  return { ok:true, sheet: sheetName, row_id: rowId, updated_fields: updatedFields };
 }
 
 // ============================================================================
