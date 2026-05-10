@@ -924,7 +924,14 @@ function renderCustomersList(){
   const tbody = document.getElementById('customers-tbody');
   if(!tbody) return;
   const all = allCustomers();
-  tbody.innerHTML = all.map((c,i)=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 12px">${i+1}</td><td style="padding:10px 12px;font-weight:600">${c.name}</td><td style="text-align:center;padding:10px 12px"><span class="tag ${c.type.toLowerCase()}">${c.type}</span></td><td style="text-align:right;padding:10px 12px">${i>=CUSTOMERS.length ? `<button class="chip" onclick="removeCustomer(${i-CUSTOMERS.length})" style="font-size:10.5px;padding:3px 8px">🗑</button>` : '<span style="color:var(--muted);font-size:11px">default</span>'}</td></tr>`).join('');
+  // Tag each customer with original index, then sort alphabetically (case-insensitive)
+  const sorted = all.map((c, originalIdx) => ({...c, originalIdx}))
+                    .sort((a, b) => a.name.localeCompare(b.name, 'id', {sensitivity: 'base'}));
+  tbody.innerHTML = sorted.map((c, i) => {
+    const isUserAdded = c.originalIdx >= CUSTOMERS.length;
+    const userAddedIdx = c.originalIdx - CUSTOMERS.length;
+    return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 12px">${i+1}</td><td style="padding:10px 12px;font-weight:600">${c.name}</td><td style="text-align:center;padding:10px 12px"><span class="tag ${c.type.toLowerCase()}">${c.type}</span></td><td style="text-align:right;padding:10px 12px">${isUserAdded ? `<button class="chip" onclick="removeCustomer(${userAddedIdx})" style="font-size:10.5px;padding:3px 8px">🗑</button>` : '<span style="color:var(--muted);font-size:11px">default</span>'}</td></tr>`;
+  }).join('');
 }
 
 function addCustomerFromMgmt(){
