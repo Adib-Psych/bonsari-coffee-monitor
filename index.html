@@ -1021,6 +1021,25 @@ function __translateSalesGB(rows) {
   });
 }
 
+// HPP/Pack proper formula: subtract amortized kemasan from base, add actual kemasan flat per pack.
+// Logic: HPP_LOCKED already includes kemasan amortized per-KG (assumes 1KG pack).
+// For smaller packs, real kemasan cost is FLAT per pack (1 plastik/pack).
+// Adib spec: RB 1KG=Rp2K, RB <1KG=Rp6.5K (kemasan kecil fancy), GC any size=Rp6.5K
+function __computeHppPack(produk, pack, packSizeKg, hppPerKg) {
+  const kode = (produk || '').toString().toUpperCase();
+  const isRB = kode.startsWith('RB');
+  const isGC = kode.startsWith('GC');
+  if (!isRB && !isGC) return hppPerKg * packSizeKg; // GB tidak ada kemasan tambahan
+  // Kemasan amortized di HPP_LOCKED (per KG basis, assumes 1KG pack)
+  const KEMASAN_BASELINE_PER_KG = isRB ? 2000 : 6500; // RB=Rp2K/KG, GC=Rp6.5K/KG
+  // Actual kemasan flat per pack
+  const isOneKG = (pack || '').toString().toUpperCase() === '1KG';
+  const KEMASAN_ACTUAL_PER_PACK = (isRB && !isOneKG) ? 6500 : (isGC ? 6500 : 2000);
+  // Subtract baseline kemasan from base HPP, then add actual kemasan flat
+  const baseExclKemasan = hppPerKg - KEMASAN_BASELINE_PER_KG;
+  return Math.round(baseExclKemasan * packSizeKg + KEMASAN_ACTUAL_PER_PACK);
+}
+
 function __translateSalesRB(rows) {
   return rows.map((r, i) => {
     const hppKg = +r.hpp_per_kg || 0;
@@ -1042,7 +1061,7 @@ function __translateSalesRB(rows) {
       packs: packs,
       harga_pack: hargaPack,
       hpp: hppKg,
-      hpp_pack: packs > 0 ? hppKg * (qty / packs) : hppKg, // HPP per single pack unit (HPP/KG × pack_size_KG)
+      hpp_pack: __computeHppPack(r.produk || '', r.pack || '1KG', packs > 0 ? (qty / packs) : 1, hppKg), // proper kemasan flat per pack
       harga: hargaPerKg,
       qty: qty,
       sales: sales,
