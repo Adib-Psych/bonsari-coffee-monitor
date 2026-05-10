@@ -464,7 +464,26 @@ footer a{color:var(--steel);text-decoration:none}
       </div>
     </div>
   </div>
-  
+
+  <!-- HPP PER PACK MATRIX (single source of truth) -->
+  <div class="section">
+    <h2>📦 HPP per Kemasan — Single Source of Truth <span class="badge">Real cost per pack (kemasan flat)</span></h2>
+    <div class="note"><strong>Formula:</strong> <code>HPP/Pack = (HPP_LOCKED − kemasan_baseline/KG) × pack_size_KG + kemasan_actual_per_pack</code><br/>
+    <strong>Kemasan baseline (sudah include di HPP_LOCKED):</strong> RB Rp 2.000/KG · GC Rp 6.500/KG<br/>
+    <strong>Kemasan actual per pack:</strong> RB 1KG = Rp 2.000 (karung) · RB &lt;1KG = Rp 6.500 (kemasan kecil) · GC any = Rp 6.500<br/>
+    <strong>Why:</strong> Kemasan adalah COST FLAT per pack (1 plastik/pack regardless size). Pack lebih kecil → HPP per gram lebih mahal karena kemasan fixed. Display ini adalah <em>real economic cost</em>.</div>
+    <div class="table-wrap">
+      <table id="tbl-hpp-pack" style="font-size:12.5px">
+        <thead><tr>
+          <th>Kode</th><th>Produk</th>
+          <th class="num">1KG</th><th class="num">500gr</th><th class="num">400gr</th>
+          <th class="num">250gr</th><th class="num">150gr</th><th class="num">100gr</th>
+        </tr></thead>
+        <tbody id="hpp-pack-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- PRICING SUGGESTION SECTION -->
   <div class="section">
     <h2>💵 Saran Harga Jual <span class="badge">Per varian/KG · sesuai produk yang dipilih di atas</span></h2>
@@ -2381,6 +2400,36 @@ document.getElementById('insight-cards').innerHTML = insights.map(i=>`
 
 
 // ============= HPP BUILD-UP =============
+// Render HPP/Pack matrix (single source of truth showing kemasan flat per pack)
+function renderHppPackMatrix(){
+  const tbody = document.getElementById('hpp-pack-tbody');
+  if(!tbody) return;
+  const HPP = { GBO:71700, GBP:74341, GBC:69968, GBL:69968, GBS:56849, RBP:126869, RBC:121402, RBL:121402, GCR:121504, GCP:139729 };
+  const NAMES = { GBO:'Green Bean Original', GBP:'Green Bean Premium', GBC:'Green Bean Special', GBL:'Green Bean Lanang', GBS:'Green Bean Sorted', RBP:'Roast Bean Premium', RBC:'Roast Bean Special', RBL:'Roast Bean Lanang', GCR:'Ground Coffee Regular', GCP:'Ground Coffee Premium' };
+  // Pack sizes per group
+  const PACK_SIZES = { '1KG':1, '500gr':0.5, '400gr':0.4, '250gr':0.25, '150gr':0.15, '100gr':0.1 };
+  const orderedPacks = ['1KG','500gr','400gr','250gr','150gr','100gr'];
+  // Which packs apply to which kode
+  const APPLICABLE = {
+    GBO:['1KG'], GBP:['1KG'], GBC:['1KG'], GBL:['1KG'], GBS:['1KG'],
+    RBP:['1KG','500gr','250gr'], RBC:['1KG','500gr','250gr'], RBL:['1KG','500gr','250gr'],
+    GCR:['1KG','500gr','400gr','250gr','150gr','100gr'],
+    GCP:['1KG','500gr','400gr','250gr','150gr','100gr']
+  };
+  const tagMap = { GBO:'tag-gb', GBP:'tag-gb', GBC:'tag-gb', GBL:'tag-gb', GBS:'tag-gb', RBP:'tag-rb', RBC:'tag-rb', RBL:'tag-rb', GCR:'tag-gc', GCP:'tag-gc' };
+  tbody.innerHTML = Object.keys(HPP).map(kode => {
+    const cells = orderedPacks.map(pack => {
+      if(!APPLICABLE[kode].includes(pack)) return '<td class="num" style="color:#CCC">—</td>';
+      const v = __computeHppPack(kode, pack, PACK_SIZES[pack], HPP[kode]);
+      const upliftPct = v / (HPP[kode] * PACK_SIZES[pack]) - 1;
+      const tooltipColor = upliftPct > 0.20 ? '#B85C5C' : (upliftPct > 0.05 ? '#E8975A' : '#5B9279');
+      const upliftStr = upliftPct > 0.005 ? `<div style="font-size:9.5px;color:${tooltipColor};margin-top:2px">+${(upliftPct*100).toFixed(0)}%</div>` : '';
+      return `<td class="num"><span style="color:var(--muted);font-size:9.5px">Rp</span> ${fmtN(v,0)}${upliftStr}</td>`;
+    }).join('');
+    return `<tr><td><span class="tag ${tagMap[kode]}">${kode}</span></td><td style="font-size:11.5px;color:var(--muted)">${NAMES[kode]}</td>${cells}</tr>`;
+  }).join('');
+}
+
 function renderBuildUp(kode){
   renderPricing(kode);
   // Update active button
@@ -2656,6 +2705,7 @@ function renderPricing(kode){
 
 // Init: render GBO build-up by default
 renderBuildUp('GBO');
+renderHppPackMatrix();
 
 
 
