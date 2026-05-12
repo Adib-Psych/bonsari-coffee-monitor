@@ -1269,11 +1269,12 @@ function renderAllPending(){ ['sales-gb','sales-rb','pengeluaran','sortasi','adj
 // ============ NOTA / INVOICE — multi-item cart ============
 let NOTA_ITEMS = []; // cart state in-memory
 
-function addNotaItem(){
+function addNotaItem(typeArg){
   NOTA_ITEMS.push({
-    id: 'tmp_' + Date.now(),
-    type: 'rb', // default
+    id: 'tmp_' + Date.now() + '_' + NOTA_ITEMS.length,
+    type: typeArg || 'rb', // default rb, can be 'gb' or 'custom'
     produk: '',
+    custom_label: '',
     pack: '1KG',
     packs: 1,
     qty_kg: 1,
@@ -1303,13 +1304,16 @@ function onNotaItemChange(idx, field, value){
   if (field === 'type') {
     it.type = value;
     it.produk = '';
-    it.pack = value === 'gb' ? '1KG' : '1KG';
+    it.custom_label = '';
+    it.pack = '1KG';
     it.packs = 1;
-    it.qty_kg = value === 'gb' ? 1 : 1;
+    it.qty_kg = 1;
     it.harga_per_pack = 0;
   } else if (field === 'produk') {
     it.produk = value;
     autoSuggestNotaPrice(idx);
+  } else if (field === 'custom_label') {
+    it.custom_label = value;
   } else if (field === 'pack') {
     it.pack = value;
     const packKg = ({'1KG':1,'500gr':0.5,'400gr':0.4,'250gr':0.25,'150gr':0.15,'100gr':0.1})[value] || 1;
@@ -1318,7 +1322,7 @@ function onNotaItemChange(idx, field, value){
   } else if (field === 'packs') {
     it.packs = parseFloat(value) || 1;
     const packKg = ({'1KG':1,'500gr':0.5,'400gr':0.4,'250gr':0.25,'150gr':0.15,'100gr':0.1})[it.pack] || 1;
-    it.qty_kg = packKg * it.packs;
+    if (it.type !== 'custom') it.qty_kg = packKg * it.packs;
   } else if (field === 'qty_kg') {
     it.qty_kg = parseFloat(value) || 0;
   } else if (field === 'harga') {
@@ -1327,6 +1331,8 @@ function onNotaItemChange(idx, field, value){
   // recompute total_sales
   if (it.type === 'gb') {
     it.total_sales = (parseFloat(it.harga_per_pack)||0) * (parseFloat(it.qty_kg)||0);
+  } else if (it.type === 'custom') {
+    it.total_sales = (parseFloat(it.harga_per_pack)||0) * (parseFloat(it.packs)||1);
   } else {
     it.total_sales = (parseFloat(it.harga_per_pack)||0) * (parseFloat(it.packs)||0);
   }
@@ -1374,24 +1380,33 @@ function renderNotaItems(){
     const packOptions = it.type === 'gb' ? '<option value="1KG">1 KG (per KG)</option>' :
       ['1KG','500gr','400gr','250gr','150gr','100gr'].map(p => `<option value="${p}" ${it.pack===p?'selected':''}>${p}</option>`).join('');
     const productOpts = products.map(p => `<option value="${p}" ${it.produk===p?'selected':''}>${p}</option>`).join('');
-    return `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;display:grid;grid-template-columns:auto 1.2fr 1fr 1fr 0.8fr 1.2fr auto;gap:8px;align-items:end;font-size:12px">
+    const isCustom = it.type === 'custom';
+    return `<div style="background:${isCustom?'#FFF7ED':'#fff'};border:1px solid ${isCustom?'#E8975A':'var(--border)'};border-radius:8px;padding:12px;margin-bottom:8px;display:grid;grid-template-columns:auto 1.2fr ${isCustom?'2fr 1fr':'1fr 1fr 0.8fr'} 1.2fr auto;gap:8px;align-items:end;font-size:12px">
       <div style="font-weight:700;color:var(--primary);align-self:center">#${idx+1}</div>
       <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Type</div>
         <select onchange="onNotaItemChange(${idx},'type',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px">
-          <option value="gb" ${it.type==='gb'?'selected':''}>Green Bean</option>
-          <option value="rb" ${it.type==='rb'?'selected':''}>RB / GC</option>
+          <option value="rb" ${it.type==='rb'?'selected':''}>☕ RB / GC</option>
+          <option value="gb" ${it.type==='gb'?'selected':''}>🌾 Green Bean</option>
+          <option value="custom" ${it.type==='custom'?'selected':''}>✨ Lainnya / Custom</option>
         </select></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Produk</div>
-        <select onchange="onNotaItemChange(${idx},'produk',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px">
-          <option value="">—</option>${productOpts}
-        </select></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'Per KG':'Pack'}</div>
-        <select onchange="onNotaItemChange(${idx},'pack',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px" ${it.type==='gb'?'disabled':''}>
-          ${packOptions}
-        </select></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'KG':'Packs'}</div>
-        <input type="number" step="${it.type==='gb'?'0.01':'1'}" min="0" value="${it.type==='gb'?it.qty_kg:it.packs}" onchange="onNotaItemChange(${idx},'${it.type==='gb'?'qty_kg':'packs'}',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px" /></div>
-      <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'Harga/KG':'Harga/Pack'}</div>
+      ${isCustom ? `
+        <div style="grid-column:span 2"><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Nama Item</div>
+          <input type="text" placeholder="e.g., Tote Bag, Ongkir, Sample 50gr..." value="${(it.custom_label||'').replace(/"/g,'&quot;')}" onchange="onNotaItemChange(${idx},'custom_label',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px;font-weight:600" /></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Qty</div>
+          <input type="number" step="1" min="0" value="${it.packs}" onchange="onNotaItemChange(${idx},'packs',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px" /></div>
+      ` : `
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">Produk</div>
+          <select onchange="onNotaItemChange(${idx},'produk',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px">
+            <option value="">—</option>${productOpts}
+          </select></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'Per KG':'Pack'}</div>
+          <select onchange="onNotaItemChange(${idx},'pack',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px" ${it.type==='gb'?'disabled':''}>
+            ${packOptions}
+          </select></div>
+        <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'KG':'Packs'}</div>
+          <input type="number" step="${it.type==='gb'?'0.01':'1'}" min="0" value="${it.type==='gb'?it.qty_kg:it.packs}" onchange="onNotaItemChange(${idx},'${it.type==='gb'?'qty_kg':'packs'}',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px" /></div>
+      `}
+      <div><div style="font-size:10px;color:var(--muted);margin-bottom:2px">${it.type==='gb'?'Harga/KG':(isCustom?'Harga/Item':'Harga/Pack')}</div>
         <input type="number" step="500" value="${it.harga_per_pack}" onchange="onNotaItemChange(${idx},'harga',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:5px;font-weight:600" /></div>
       <button onclick="removeNotaItem(${idx})" style="background:#FCEBEB;color:#B85C5C;border:1px solid #B85C5C;width:32px;height:32px;border-radius:6px;cursor:pointer;align-self:center">×</button>
       <div style="grid-column:1/-1;text-align:right;font-size:12px;color:var(--muted);margin-top:-4px">Subtotal: <strong style="color:var(--primary)">${fmtRp(it.total_sales)}</strong></div>
@@ -1440,9 +1455,14 @@ async function submitNota(){
   if (NOTA_ITEMS.length === 0) { toast('Tambah minimal 1 item','error'); return; }
   // Validate items
   for (const it of NOTA_ITEMS) {
-    if (!it.produk) { toast('Pilih produk untuk semua item','error'); return; }
-    if (it.type === 'gb' && (!it.qty_kg || it.qty_kg <= 0)) { toast('Qty GB wajib > 0','error'); return; }
-    if (it.type === 'rb' && (!it.packs || it.packs <= 0)) { toast('Packs wajib > 0','error'); return; }
+    if (it.type === 'custom') {
+      if (!it.custom_label || !it.custom_label.trim()) { toast('Isi label untuk item custom','error'); return; }
+      if (!it.packs || it.packs <= 0) { toast('Qty custom wajib > 0','error'); return; }
+    } else {
+      if (!it.produk) { toast('Pilih produk untuk semua item','error'); return; }
+      if (it.type === 'gb' && (!it.qty_kg || it.qty_kg <= 0)) { toast('Qty GB wajib > 0','error'); return; }
+      if (it.type === 'rb' && (!it.packs || it.packs <= 0)) { toast('Packs wajib > 0','error'); return; }
+    }
     if (!it.harga_per_pack || it.harga_per_pack <= 0) { toast('Harga semua item wajib > 0','error'); return; }
   }
   const cust = getCustomer(customer);
@@ -1451,20 +1471,38 @@ async function submitNota(){
     tanggal: tgl,
     customer: customer,
     customer_type: cust ? cust.type : 'New',
-    items: NOTA_ITEMS.map(it => ({
-      type: it.type === 'gb' ? 'sales-gb' : 'sales-rb',
-      produk: it.produk,
-      pack: it.type === 'gb' ? '1KG' : it.pack,
-      packs: it.type === 'gb' ? 1 : it.packs,
-      qty: it.type === 'gb' ? it.qty_kg : undefined,
-      qty_kg: it.qty_kg,
-      harga_per_kg: it.type === 'gb' ? it.harga_per_pack : undefined,
-      harga_per_pack: it.harga_per_pack,
-      hpp_per_kg: HPP_LOCKED[it.produk] || 0,
-      total_sales: it.total_sales,
-      total_hpp: (HPP_LOCKED[it.produk] || 0) * it.qty_kg,
-      gb_equivalent: it.type === 'rb' ? it.qty_kg * ROAST_YIELD : undefined
-    })),
+    items: NOTA_ITEMS.map(it => {
+      if (it.type === 'custom') {
+        return {
+          type: 'sales-misc',
+          label: it.custom_label,
+          produk: 'MISC',
+          pack: '-',
+          packs: it.packs,
+          qty: it.packs,
+          qty_kg: 0,
+          harga_per_pack: it.harga_per_pack,
+          hpp_per_kg: 0,
+          total_sales: it.total_sales,
+          total_hpp: 0,
+          gb_equivalent: 0
+        };
+      }
+      return {
+        type: it.type === 'gb' ? 'sales-gb' : 'sales-rb',
+        produk: it.produk,
+        pack: it.type === 'gb' ? '1KG' : it.pack,
+        packs: it.type === 'gb' ? 1 : it.packs,
+        qty: it.type === 'gb' ? it.qty_kg : undefined,
+        qty_kg: it.qty_kg,
+        harga_per_kg: it.type === 'gb' ? it.harga_per_pack : undefined,
+        harga_per_pack: it.harga_per_pack,
+        hpp_per_kg: HPP_LOCKED[it.produk] || 0,
+        total_sales: it.total_sales,
+        total_hpp: (HPP_LOCKED[it.produk] || 0) * it.qty_kg,
+        gb_equivalent: it.type === 'rb' ? it.qty_kg * ROAST_YIELD : undefined
+      };
+    }),
     diskon: parseFloat(document.getElementById('nota-diskon').value) || 0,
     dp_paid: parseFloat(document.getElementById('nota-dp').value) || 0,
     status_payment: document.getElementById('nota-status').value,

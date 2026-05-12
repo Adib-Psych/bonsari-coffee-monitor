@@ -120,11 +120,24 @@ async function loadNota() {
 function renderNota(h, items) {
   const totalItems = items.length;
   const itemsHtml = items.map((it, idx) => {
-    const isGB = (it._sheet || '').includes('GB');
+    const sheetTag = (it._sheet || '');
+    const isMisc = sheetTag.includes('MISC') || sheetTag.includes('Misc');
+    const isGB = !isMisc && sheetTag.includes('GB');
+    const subtotal = parseFloat(it.total_sales) || 0;
+    if (isMisc) {
+      const qty = parseFloat(it.qty) || 1;
+      const harga = parseFloat(it.harga_per_pack) || 0;
+      return '<tr>' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td><strong>' + (it.label || 'Misc Item') + '</strong><div style="font-size:11px;color:var(--muted)">Custom · Lainnya</div></td>' +
+        '<td class="num">' + qty + '</td>' +
+        '<td class="num">' + fmtRp(harga) + '</td>' +
+        '<td class="num"><strong>' + fmtRp(subtotal) + '</strong></td>' +
+      '</tr>';
+    }
     const pack = isGB ? (it.produk || '') + ' (1KG)' : ((it.pack || '1KG') + (it.packs > 1 ? ' × ' + it.packs : ''));
     const qty = isGB ? (parseFloat(it.qty) || 0) + ' KG' : ((parseFloat(it.packs) || 1) + ' pack');
     const hargaShown = isGB ? (parseFloat(it.harga_per_kg) || 0) : (parseFloat(it.harga_per_pack) || 0);
-    const subtotal = parseFloat(it.total_sales) || 0;
     const produkName = ({
       'GBO':'Green Bean Original','GBP':'Green Bean Premium','GBC':'Green Bean Special',
       'GBL':'Green Bean Lanang','GBS':'Green Bean Sorted',

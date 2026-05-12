@@ -48,7 +48,8 @@ const SHEETS = {
   SALES_GB: 'Sales_GB',
   SALES_RB: 'Sales_RB',
   LOGBOOK: 'Logbook',
-  NOTA: 'Nota'
+  NOTA: 'Nota',
+  NOTA_MISC: 'Nota_Misc'
 };
 
 const NOTA_HEADERS = [
@@ -56,6 +57,12 @@ const NOTA_HEADERS = [
   'subtotal', 'diskon', 'total', 'dp_paid', 'sisa',
   'status_payment', 'paid_date', 'metode_bayar', 'catatan',
   'item_count', 'created_at'
+];
+
+const NOTA_MISC_HEADERS = [
+  'id', 'nota_id', 'tanggal', 'customer', 'customer_type',
+  'label', 'qty', 'harga_per_pack', 'total_sales',
+  'catatan', 'created_at'
 ];
 
 const GB_MOVEMENT_HEADERS = [
@@ -646,13 +653,33 @@ function handleSubmitNota_(ss, body) {
   let subtotal = 0;
   const insertedIds = [];
 
-  // Insert each item to Sales_GB or Sales_RB with nota_id
+  // Insert each item to Sales_GB / Sales_RB / Nota_Misc with nota_id
   items.forEach((it, idx) => {
     const type = (it.type || '').toLowerCase();
     const itemId = it.id || ('NTI_' + Date.now() + '_' + idx);
     const lineSales = parseFloat(it.total_sales || 0) || (parseFloat(it.harga_per_pack || it.harga_per_kg || 0) * parseFloat(it.packs || it.qty || 1));
     subtotal += lineSales;
-    if (type === 'sales-gb' || type === 'gb') {
+    if (type === 'sales-misc' || type === 'misc' || type === 'custom') {
+      // Custom / Misc items (ongkir, merchandise, sample, etc) → Nota_Misc sheet
+      const sheet = ensureSheet_(ss, SHEETS.NOTA_MISC, NOTA_MISC_HEADERS);
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'label') return it.label || it.custom_label || it.produk || 'Misc';
+        if (h === 'qty') return parseFloat(it.qty || it.packs || 1);
+        if (h === 'harga_per_pack') return parseFloat(it.harga_per_pack || 0);
+        if (h === 'total_sales') return lineSales;
+        if (h === 'catatan') return it.catatan || '';
+        if (h === 'created_at') return new Date().toISOString();
+        return '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Nota_Misc', id: itemId });
+    } else if (type === 'sales-gb' || type === 'gb') {
       const sheet = ensureSheetWithColumn_(ss, SHEETS.SALES_GB, 'nota_id');
       const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
       const row = headers.map(h => {
@@ -802,9 +829,9 @@ function getNotaDetail_(ss, notaId) {
     if (v instanceof Date) v = Utilities.formatDate(v, 'GMT+7', 'yyyy-MM-dd');
     header[h] = v;
   });
-  // Fetch line items from Sales_GB + Sales_RB where nota_id matches
+  // Fetch line items from Sales_GB + Sales_RB + Nota_Misc where nota_id matches
   const items = [];
-  ['SALES_GB','SALES_RB'].forEach(sn => {
+  ['SALES_GB','SALES_RB','NOTA_MISC'].forEach(sn => {
     const sheet = ss.getSheetByName(SHEETS[sn]);
     if (!sheet) return;
     const sHeaders = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
