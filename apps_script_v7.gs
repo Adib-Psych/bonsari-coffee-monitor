@@ -47,8 +47,16 @@ const SHEETS = {
   PENGELUARAN: 'Pengeluaran',
   SALES_GB: 'Sales_GB',
   SALES_RB: 'Sales_RB',
-  LOGBOOK: 'Logbook'
+  LOGBOOK: 'Logbook',
+  NOTA: 'Nota'
 };
+
+const NOTA_HEADERS = [
+  'id', 'tanggal', 'customer', 'customer_type',
+  'subtotal', 'diskon', 'total', 'dp_paid', 'sisa',
+  'status_payment', 'paid_date', 'metode_bayar', 'catatan',
+  'item_count', 'created_at'
+];
 
 const GB_MOVEMENT_HEADERS = [
   'id', 'tanggal_iso', 'source', 'grade', 'qty_signed',
@@ -84,6 +92,16 @@ function doGet(e) {
     if (!ss.getSheetByName(SHEETS.GB_MOVEMENT)) {
       setupBaseline();
     }
+    // V8 bootstrap: ensure Nota sheet exists
+    if (!ss.getSheetByName(SHEETS.NOTA)) {
+      ensureSheet_(ss, SHEETS.NOTA, NOTA_HEADERS);
+    }
+    // Nota single fetch — for print viewer
+    if (e && e.parameter && e.parameter.nota) {
+      return ContentService
+        .createTextOutput(JSON.stringify(getNotaDetail_(ss, e.parameter.nota)))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     // V7.3: DO NOT auto-migrate in doGet. Historical sortasi batches are already
     // reflected in baseline 5 Mei opname (313.97 KG); re-migrating would double-count.
     // Migration only for NEW batches submitted post-baseline via doPost handlers.
@@ -107,7 +125,8 @@ function doGet(e) {
       pengeluaran:  readSheet_(ss, SHEETS.PENGELUARAN),
       sales_gb:     readSheet_(ss, SHEETS.SALES_GB),
       sales_rb:     readSheet_(ss, SHEETS.SALES_RB),
-      logbook:      readSheet_(ss, SHEETS.LOGBOOK)
+      logbook:      readSheet_(ss, SHEETS.LOGBOOK),
+      nota:         readSheet_(ss, SHEETS.NOTA)
     };
     // Compute summary
     data.summary = computeStockSummary_(data.gb_movements);
@@ -168,6 +187,12 @@ function doPost(e) {
         break;
       case 'update_sales_row':
         result = handleUpdateSalesRow_(ss, body);
+        break;
+      case 'submit_nota':
+        result = handleSubmitNota_(ss, body);
+        break;
+      case 'update_nota_status':
+        result = handleUpdateNotaStatus_(ss, body);
         break;
       default:
         result = { ok: false, error: 'Unknown action: ' + action };
@@ -568,6 +593,253 @@ function handleUpdateSalesRow_(ss, body) {
     }
   });
   return { ok:true, sheet: sheetName, row_id: rowId, updated_fields: updatedFields };
+}
+
+// ============================================================================
+// NOTA / INVOICE — V8 (10 Mei 2026)
+// ============================================================================
+
+/**
+ * Generate Nota ID format BC-YYYY-NNNN (4-digit sequential per year).
+ * Scan existing Nota sheet for max NNN this year, increment.
+ */
+function generateNotaId_(ss) {
+  const year = new Date().getFullYear();
+  const prefix = 'BC-' + year + '-';
+  const sheet = ensureSheet_(ss, SHEETS.NOTA, NOTA_HEADERS);
+  const lastRow = sheet.getLastRow();
+  let maxN = 0;
+  if (lastRow >= 2) {
+    const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    ids.forEach(r => {
+      const id = (r[0] || '').toString();
+      if (id.startsWith(prefix)) {
+        const n = parseInt(id.substring(prefix.length), 10);
+        if (!isNaN(n) && n > maxN) maxN = n;
+      }
+    });
+  }
+  const next = (maxN + 1).toString().padStart(4, '0');
+  return prefix + next;
+}
+
+/**
+ * Submit Nota with multiple items.
+ * Body: {
+ *   tanggal, customer, customer_type, items: [{type:'gb'|'rb', produk, pack, packs, qty_kg, harga_per_pack, ...}],
+ *   diskon?, dp_paid?, status_payment, metode_bayar?, catatan?
+ * }
+ */
+function handleSubmitNota_(ss, body) {
+  const items = body.items || [];
+  if (!items.length) return { ok: false, error: 'items wajib min 1' };
+  const customer = body.customer || '';
+  const customerType = body.customer_type || 'Retail';
+  const tanggal = (body.tanggal || new Date().toISOString().slice(0, 10));
+  const diskon = parseFloat(body.diskon || 0);
+  const dpPaid = parseFloat(body.dp_paid || 0);
+  const metodeBayar = body.metode_bayar || '';
+  const catatan = body.catatan || '';
+  const statusPayment = (body.status_payment || 'UNPAID').toUpperCase();
+
+  const notaId = generateNotaId_(ss);
+  let subtotal = 0;
+  const insertedIds = [];
+
+  // Insert each item to Sales_GB or Sales_RB with nota_id
+  items.forEach((it, idx) => {
+    const type = (it.type || '').toLowerCase();
+    const itemId = it.id || ('NTI_' + Date.now() + '_' + idx);
+    const lineSales = parseFloat(it.total_sales || 0) || (parseFloat(it.harga_per_pack || it.harga_per_kg || 0) * parseFloat(it.packs || it.qty || 1));
+    subtotal += lineSales;
+    if (type === 'sales-gb' || type === 'gb') {
+      const sheet = ensureSheetWithColumn_(ss, SHEETS.SALES_GB, 'nota_id');
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'created') return new Date().toISOString();
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'type') return 'sales-gb';
+        if (h === 'status') return 'synced';
+        if (h === 'synced_at') return new Date().toISOString();
+        return it[h] !== undefined ? it[h] : '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Sales_GB', id: itemId });
+    } else {
+      const sheet = ensureSheetWithColumn_(ss, SHEETS.SALES_RB, 'nota_id');
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'created') return new Date().toISOString();
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'type') return 'sales-rb';
+        if (h === 'status') return 'synced';
+        if (h === 'synced_at') return new Date().toISOString();
+        return it[h] !== undefined ? it[h] : '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Sales_RB', id: itemId });
+    }
+  });
+
+  const total = subtotal - diskon;
+  const sisa = total - dpPaid;
+  // Auto-determine status if not explicit
+  let finalStatus = statusPayment;
+  if (statusPayment === 'UNPAID' && dpPaid > 0 && dpPaid < total) finalStatus = 'PARTIAL';
+  if (statusPayment === 'UNPAID' && dpPaid >= total) finalStatus = 'PAID';
+  if (finalStatus === 'PAID') {
+    // ensure dp_paid = total
+    body.dp_paid = total;
+  }
+  const paidDate = finalStatus === 'PAID' ? tanggal : (body.paid_date || '');
+
+  // Insert Nota header row
+  const notaSheet = ensureSheet_(ss, SHEETS.NOTA, NOTA_HEADERS);
+  const notaRow = NOTA_HEADERS.map(h => {
+    if (h === 'id') return notaId;
+    if (h === 'tanggal') return tanggal;
+    if (h === 'customer') return customer;
+    if (h === 'customer_type') return customerType;
+    if (h === 'subtotal') return subtotal;
+    if (h === 'diskon') return diskon;
+    if (h === 'total') return total;
+    if (h === 'dp_paid') return finalStatus === 'PAID' ? total : dpPaid;
+    if (h === 'sisa') return finalStatus === 'PAID' ? 0 : sisa;
+    if (h === 'status_payment') return finalStatus;
+    if (h === 'paid_date') return paidDate;
+    if (h === 'metode_bayar') return metodeBayar;
+    if (h === 'catatan') return catatan;
+    if (h === 'item_count') return items.length;
+    if (h === 'created_at') return new Date().toISOString();
+    return '';
+  });
+  notaSheet.appendRow(notaRow);
+
+  return {
+    ok: true,
+    nota_id: notaId,
+    total: total,
+    subtotal: subtotal,
+    diskon: diskon,
+    dp_paid: finalStatus === 'PAID' ? total : dpPaid,
+    sisa: finalStatus === 'PAID' ? 0 : sisa,
+    status: finalStatus,
+    items_count: items.length,
+    items_inserted: insertedIds
+  };
+}
+
+/**
+ * Update Nota status (PAID/PARTIAL/UNPAID) + optionally add DP payment.
+ * Body: { nota_id, status_payment?, dp_paid?, paid_date?, metode_bayar?, catatan? }
+ */
+function handleUpdateNotaStatus_(ss, body) {
+  const notaId = body.nota_id;
+  if (!notaId) return { ok: false, error: 'nota_id wajib' };
+  const sheet = ensureSheet_(ss, SHEETS.NOTA, NOTA_HEADERS);
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'Nota sheet empty' };
+  const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues().map(r => r[0]);
+  const idx = ids.indexOf(notaId);
+  if (idx < 0) return { ok: false, error: 'nota_id ' + notaId + ' not found' };
+  const sheetRow = idx + 2;
+  const currentRow = sheet.getRange(sheetRow, 1, 1, headers.length).getValues()[0];
+  const rowMap = {};
+  headers.forEach((h, i) => { rowMap[h] = currentRow[i]; });
+  const total = parseFloat(rowMap.total) || 0;
+  let newDp = parseFloat(rowMap.dp_paid) || 0;
+  if (body.dp_paid !== undefined) {
+    newDp = parseFloat(body.dp_paid);
+  } else if (body.add_dp !== undefined) {
+    newDp += parseFloat(body.add_dp);
+  }
+  const sisa = Math.max(0, total - newDp);
+  let newStatus = body.status_payment || rowMap.status_payment;
+  if (newDp >= total - 0.01) newStatus = 'PAID';
+  else if (newDp > 0) newStatus = 'PARTIAL';
+  else newStatus = 'UNPAID';
+  const paidDate = newStatus === 'PAID' ? (body.paid_date || new Date().toISOString().slice(0, 10)) : (rowMap.paid_date || '');
+  // Write updates
+  const updates = {
+    dp_paid: newDp,
+    sisa: sisa,
+    status_payment: newStatus,
+    paid_date: paidDate,
+    metode_bayar: body.metode_bayar || rowMap.metode_bayar || ''
+  };
+  if (body.catatan !== undefined) updates.catatan = body.catatan;
+  Object.keys(updates).forEach(field => {
+    const c = headers.indexOf(field) + 1;
+    if (c > 0) sheet.getRange(sheetRow, c).setValue(updates[field]);
+  });
+  return { ok: true, nota_id: notaId, status: newStatus, dp_paid: newDp, sisa: sisa, total: total };
+}
+
+/**
+ * Get full Nota detail (header + line items) for print preview.
+ */
+function getNotaDetail_(ss, notaId) {
+  const notaSheet = ensureSheet_(ss, SHEETS.NOTA, NOTA_HEADERS);
+  const nHeaders = notaSheet.getRange(1,1,1,notaSheet.getLastColumn()).getValues()[0];
+  const lastRow = notaSheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'Nota empty' };
+  const ids = notaSheet.getRange(2, 1, lastRow - 1, 1).getValues().map(r => r[0]);
+  const idx = ids.indexOf(notaId);
+  if (idx < 0) return { ok: false, error: 'nota_id not found' };
+  const row = notaSheet.getRange(idx + 2, 1, 1, nHeaders.length).getValues()[0];
+  const header = {};
+  nHeaders.forEach((h, i) => {
+    let v = row[i];
+    if (v instanceof Date) v = Utilities.formatDate(v, 'GMT+7', 'yyyy-MM-dd');
+    header[h] = v;
+  });
+  // Fetch line items from Sales_GB + Sales_RB where nota_id matches
+  const items = [];
+  ['SALES_GB','SALES_RB'].forEach(sn => {
+    const sheet = ss.getSheetByName(SHEETS[sn]);
+    if (!sheet) return;
+    const sHeaders = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+    const notaCol = sHeaders.indexOf('nota_id');
+    if (notaCol < 0) return;
+    const lr = sheet.getLastRow();
+    if (lr < 2) return;
+    const data = sheet.getRange(2,1,lr-1,sHeaders.length).getValues();
+    data.forEach(r => {
+      if (r[notaCol] === notaId) {
+        const obj = {};
+        sHeaders.forEach((h, i) => {
+          let v = r[i];
+          if (v instanceof Date) v = Utilities.formatDate(v, 'GMT+7', 'yyyy-MM-dd');
+          obj[h] = v;
+        });
+        obj._sheet = sn;
+        items.push(obj);
+      }
+    });
+  });
+  return { ok: true, header: header, items: items };
+}
+
+/**
+ * Helper: ensure a column exists in a sheet (append column if missing).
+ */
+function ensureSheetWithColumn_(ss, sheetName, colName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return null;
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf(colName) < 0) {
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(colName).setFontWeight('bold').setBackground('#1B2A41').setFontColor('#fff');
+  }
+  return sheet;
 }
 
 // ============================================================================
