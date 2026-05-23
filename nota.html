@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nota Bonsari Coffee</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --plum: #4A2C40;
@@ -53,8 +54,9 @@
   .total-row.grand { font-size: 18px; font-weight: 800; color: var(--plum); border-top: 2px solid var(--accent); padding-top: 12px; margin-top: 8px; }
   .total-row.sisa { color: var(--danger); font-weight: 700; }
   .total-row.paid-amount { color: var(--success); font-weight: 600; }
-  .footer-msg { background: linear-gradient(135deg, #FAF6F0, #F2EBE3); border-radius: 10px; padding: 18px 22px; margin-top: 24px; font-size: 12px; line-height: 1.7; color: var(--text); text-align: center; font-style: italic; border-left: 4px solid var(--accent); }
+  .footer-msg { background: linear-gradient(135deg, #FAF6F0, #F2EBE3); border-radius: 10px; padding: 18px 22px; margin-top: 12px; font-size: 12px; line-height: 1.7; color: var(--text); text-align: center; font-style: italic; border-left: 4px solid var(--accent); }
   .footer-msg b { color: var(--plum); font-style: normal; }
+  .thanks-msg { text-align: center; margin-top: 24px; font-family: 'Caveat', 'Brush Script MT', cursive; font-size: 38px; font-weight: 700; color: #4A7A4D; font-style: italic; line-height: 1.1; letter-spacing: 0.5px; text-shadow: 1px 1px 2px rgba(74, 122, 77, 0.12); }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 16px 0; }
   .btn { padding: 12px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
   .btn:hover { transform: translateY(-1px); }
@@ -70,7 +72,7 @@
   .qr-section .qris-meta { margin-top: 10px; font-size: 11px; color: var(--muted); }
   .qr-section .qris-meta b { color: var(--text); }
   /* Partial payment breakdown */
-  .pay-breakdown { background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 8px; padding: 10px 14px; margin: 0 auto 14px; max-width: 320px; font-size: 12px; text-align: left; }
+  .pay-breakdown { background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 8px; padding: 12px 18px; margin: 0 auto 14px; max-width: 440px; width: 90%; font-size: 13px; text-align: left; }
   .pay-breakdown .row { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
   .pay-breakdown .row.dp-row { color: #5B9279; }
   .pay-breakdown .row.sisa-row { color: #B85C5C; font-weight: 700; font-size: 13px; border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 6px; }
@@ -208,6 +210,7 @@ function renderNota(h, items) {
         '<div class="total-row grand"><span>TOTAL</span><span>' + fmtRp(h.total) + '</span></div>' +
       '</div>' +
       (h.catatan ? '<div style="margin-top:16px;padding:12px 16px;background:#FAF6F0;border-radius:8px;font-size:12px;color:var(--muted)"><b>Catatan:</b> ' + h.catatan + '</div>' : '') +
+      '<div class="thanks-msg">Thanks for Your Purchase!</div>' +
       '<div class="footer-msg">' +
         'Dengan memilih Bonsari Coffee, Anda tidak hanya membeli kopi&mdash;Anda juga membuat perubahan. <b>30% dari laba bersih Bonsari Coffee</b> dialokasikan untuk <b>TPQ Darul Mujtaba</b>, peningkatan perekonomian masyarakat, pendidikan, dan dakwah. Pembelian Anda membantu mendanai layanan sosial dan program <b>"Wakaf Produktif"</b> di perkebunan kopi kami.' +
       '</div>' +
