@@ -137,11 +137,78 @@ async function loadNota() {
       document.getElementById('content').innerHTML = '<div class="error">⚠️ ' + (j.error || 'Gagal load nota') + '</div>';
       return;
     }
+    __lastNotaSig = __notaSignature(j.header);
     renderNota(j.header, j.items);
   } catch (e) {
     document.getElementById('content').innerHTML = '<div class="error">⚠️ Error: ' + e.message + '</div>';
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// SILENT AUTO-REFRESH ENGINE — Nota Viewer (V8.3, 23 Mei 2026)
+// Customer scan QRIS → status PAID otomatis appear. No manual refresh needed.
+// Strategy: poll same nota every 30s, detect status_payment / dp_paid change.
+// Disable via URL: &nopolling=1
+// ═══════════════════════════════════════════════════════════════
+const __NOTA_POLL_MS = 30000;
+let __notaPollId = null;
+let __lastNotaSig = null;
+
+function __notaSignature(h) {
+  if (!h) return null;
+  return (h.status_payment || '') + '|' + (h.dp_paid || 0) + '|' + (h.sisa || 0) + '|' + (h.paid_date || '') + '|' + (h.metode_bayar || '');
+}
+
+function __notaToast(msg, kind) {
+  const color = kind === 'paid' ? '#5B9279' : (kind === 'partial' ? '#E89F4D' : '#4A2C40');
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:20px;right:20px;background:' + color + ';color:white;padding:12px 18px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:99999;font-family:system-ui,-apple-system,sans-serif;max-width:340px';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity 0.3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4500);
+}
+
+async function silentReloadNota() {
+  if (document.hidden) return;
+  if (new URLSearchParams(location.search).get('nopolling') === '1') return;
+  if (!notaId) return;
+  try {
+    const r = await fetch(API_URL + '?nota=' + encodeURIComponent(notaId), {cache:'no-store'});
+    const j = await r.json();
+    if (!j.ok || !j.header) return;
+    const newSig = __notaSignature(j.header);
+    if (__lastNotaSig === null) { __lastNotaSig = newSig; return; }
+    if (newSig !== __lastNotaSig) {
+      const oldStatus = (__lastNotaSig.split('|')[0] || 'UNKNOWN').toUpperCase();
+      const newStatus = (j.header.status_payment || 'UNKNOWN').toUpperCase();
+      console.log('[Nota Sync] ✓ Status changed: ' + oldStatus + ' → ' + newStatus, {old:__lastNotaSig, new:newSig});
+      __lastNotaSig = newSig;
+      // Toast message based on status transition
+      let msg, kind;
+      if (newStatus === 'PAID') { msg = '✓ Pembayaran LUNAS · ' + (j.header.metode_bayar || 'OK'); kind = 'paid'; }
+      else if (newStatus === 'PARTIAL') { msg = '◐ DP diterima · Sisa Rp ' + Math.round(j.header.sisa).toLocaleString('id-ID'); kind = 'partial'; }
+      else { msg = '✓ Nota updated · ' + newStatus; kind = 'info'; }
+      __notaToast(msg, kind);
+      // Re-render the full nota (status badge + payment section + LUNAS stamp)
+      setTimeout(() => renderNota(j.header, j.items), 1500);
+    }
+  } catch (e) { console.warn('[Nota Sync] silent refresh failed:', e.message); }
+}
+
+function __startNotaPolling() {
+  if (__notaPollId) clearInterval(__notaPollId);
+  __notaPollId = setInterval(silentReloadNota, __NOTA_POLL_MS);
+  console.log('[Nota Sync] 🟢 Auto-poll started · every ' + (__NOTA_POLL_MS / 1000) + 's · pause when tab hidden');
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    console.log('[Nota Sync] ⏸ Tab hidden — poll paused');
+  } else {
+    console.log('[Nota Sync] ▶ Tab visible — immediate check');
+    silentReloadNota();
+  }
+});
 
 function renderNota(h, items) {
   const totalItems = items.length;
@@ -305,7 +372,7 @@ function downloadJPG(notaId) {
   });
 }
 
-loadNota();
+loadNota().then(() => { setTimeout(__startNotaPolling, 5000); });
 </script>
 </body>
 </html>

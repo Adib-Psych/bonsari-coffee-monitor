@@ -1630,9 +1630,123 @@ function clearAllDrafts(){
 }
 
 window.addEventListener('DOMContentLoaded', function() {
-  try { init(); } catch(err) { 
-    console.error('Init error:', err); 
-    alert('Dashboard init error: ' + err.message + '\n\nCheck browser console for details.'); 
+  try { init(); } catch(err) {
+    console.error('Init error:', err);
+    alert('Dashboard init error: ' + err.message + '\n\nCheck browser console for details.');
+  }
+  // V8.3: Start backend health ping + new-entry notifier (poll 30s)
+  setTimeout(__startEntryPolling, 5000);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SILENT BACKEND PING + NEW ENTRY NOTIFIER — Entry Dashboard (V8.3, 23 Mei 2026)
+// Strategy: poll ?data=all every 30s, count nota & sales total.
+// If count goes UP (new entries from another browser/device),
+// show toast "ada entry baru dari device lain — refresh untuk lihat".
+// Tidak auto-reload (avoid lose user's typing in form).
+// Disable via URL: ?nopolling=1
+// ═══════════════════════════════════════════════════════════════
+const __ENTRY_POLL_MS = 30000;
+let __entryPollId = null;
+let __lastEntrySig = null;
+let __syncBadge = null;
+
+function __entrySignature(payload) {
+  const s = (payload && payload.data) || payload || {};
+  return JSON.stringify({
+    nota: (s.nota || []).length,
+    sgb: (s.sales_gb || []).length,
+    srb: (s.sales_rb || []).length,
+    peng: (s.pengeluaran || []).length,
+    sort: (s.sortasi || []).length
+  });
+}
+
+function __entryToast(msg, kind) {
+  const color = kind === 'warn' ? '#E89F4D' : (kind === 'err' ? '#B85C5C' : '#5B9279');
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:20px;right:20px;background:' + color + ';color:white;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.2);z-index:99999;font-family:system-ui,-apple-system,sans-serif;max-width:340px';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity 0.3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+function __ensureSyncBadge() {
+  if (__syncBadge) return __syncBadge;
+  __syncBadge = document.createElement('div');
+  __syncBadge.id = 'sync-badge';
+  __syncBadge.style.cssText = 'position:fixed;bottom:14px;right:14px;background:rgba(91,146,121,0.92);color:white;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:600;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,0.15);z-index:9998;display:flex;align-items:center;gap:6px';
+  __syncBadge.innerHTML = '<span style="display:inline-block;width:8px;height:8px;background:#FFF;border-radius:50%;animation:pulse 2s infinite"></span><span id="sync-badge-text">Sync ON</span>';
+  document.body.appendChild(__syncBadge);
+  // Pulse animation
+  if (!document.getElementById('sync-pulse-style')) {
+    const st = document.createElement('style');
+    st.id = 'sync-pulse-style';
+    st.textContent = '@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }';
+    document.head.appendChild(st);
+  }
+  return __syncBadge;
+}
+
+async function silentEntryPoll() {
+  if (document.hidden) return;
+  if (new URLSearchParams(location.search).get('nopolling') === '1') return;
+  const url = (STATE && STATE.webhook_url ? STATE.webhook_url : DEFAULT_WEBHOOK) + '?data=all';
+  try {
+    const r = await fetch(url, {cache:'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j.ok) return;
+    const sig = __entrySignature(j);
+    const badge = __ensureSyncBadge();
+    badge.style.background = 'rgba(91,146,121,0.92)';
+    const ts = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('sync-badge-text').textContent = 'Sync ON · ' + ts;
+    if (__lastEntrySig === null) { __lastEntrySig = sig; return; }
+    if (sig !== __lastEntrySig) {
+      const oldCounts = JSON.parse(__lastEntrySig);
+      const newCounts = JSON.parse(sig);
+      const delta = {
+        nota: newCounts.nota - oldCounts.nota,
+        sgb: newCounts.sgb - oldCounts.sgb,
+        srb: newCounts.srb - oldCounts.srb,
+        peng: newCounts.peng - oldCounts.peng,
+        sort: newCounts.sort - oldCounts.sort
+      };
+      const additions = [];
+      if (delta.nota > 0) additions.push(delta.nota + ' nota');
+      if (delta.sgb > 0) additions.push(delta.sgb + ' sales GB');
+      if (delta.srb > 0) additions.push(delta.srb + ' sales RB');
+      if (delta.peng > 0) additions.push(delta.peng + ' pengeluaran');
+      if (delta.sort > 0) additions.push(delta.sort + ' sortasi');
+      console.log('[Entry Sync] ✓ Backend updated', {old:oldCounts, new:newCounts, delta});
+      __lastEntrySig = sig;
+      if (additions.length > 0) {
+        __entryToast('✓ Entry baru dari device lain: ' + additions.join(', '), 'info');
+      }
+    }
+  } catch (e) {
+    console.warn('[Entry Sync] ping failed:', e.message);
+    const badge = __ensureSyncBadge();
+    badge.style.background = 'rgba(184,92,92,0.92)';
+    document.getElementById('sync-badge-text').textContent = 'Sync OFF · check internet';
+  }
+}
+
+function __startEntryPolling() {
+  __ensureSyncBadge();
+  silentEntryPoll(); // immediate first poll
+  if (__entryPollId) clearInterval(__entryPollId);
+  __entryPollId = setInterval(silentEntryPoll, __ENTRY_POLL_MS);
+  console.log('[Entry Sync] 🟢 Auto-poll started · every ' + (__ENTRY_POLL_MS / 1000) + 's · pause when tab hidden');
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    console.log('[Entry Sync] ⏸ Tab hidden — poll paused');
+  } else {
+    console.log('[Entry Sync] ▶ Tab visible — immediate check');
+    silentEntryPoll();
   }
 });
 </script>
