@@ -67,6 +67,18 @@
   .qr-section .qris-img { max-width: 220px; width: 100%; height: auto; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
   .qr-section .qris-meta { margin-top: 10px; font-size: 11px; color: var(--muted); }
   .qr-section .qris-meta b { color: var(--text); }
+  /* Partial payment breakdown */
+  .pay-breakdown { background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 8px; padding: 10px 14px; margin: 0 auto 14px; max-width: 320px; font-size: 12px; text-align: left; }
+  .pay-breakdown .row { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
+  .pay-breakdown .row.dp-row { color: #5B9279; }
+  .pay-breakdown .row.sisa-row { color: #B85C5C; font-weight: 700; font-size: 13px; border-top: 1px dashed var(--border); margin-top: 4px; padding-top: 6px; }
+  /* LUNAS stamp (for PAID nota) */
+  .paid-stamp-section { text-align: center; margin-top: 24px; padding: 28px 16px; border-top: 1px dashed var(--border); background: linear-gradient(180deg, #F1F8EE 0%, #FFFFFF 70%); border-radius: 12px; border: 2px solid #5B9279; }
+  .lunas-stamp { display: inline-block; padding: 14px 36px; border: 4px double #B85C5C; border-radius: 8px; transform: rotate(-8deg); margin-bottom: 16px; background: #FFFFFF; box-shadow: 0 2px 6px rgba(184, 92, 92, 0.15); }
+  .lunas-stamp .stamp-text { font-size: 36px; font-weight: 900; color: #B85C5C; letter-spacing: 6px; line-height: 1; font-family: 'Times New Roman', serif; }
+  .lunas-stamp .stamp-sub { font-size: 10px; color: #B85C5C; letter-spacing: 2px; margin-top: 4px; font-weight: 700; }
+  .paid-info { font-size: 13px; color: var(--text); line-height: 1.7; }
+  .paid-info b { color: #5B9279; }
   .btn-warning { background: #E89F4D; color: white; }
   .btn-warning:hover { background: #D4843A; }
   .qr-code { width: 80px; height: 80px; display: inline-block; }
@@ -192,21 +204,13 @@ function renderNota(h, items) {
         '<div class="total-row"><span>Subtotal (' + totalItems + ' item)</span><strong>' + fmtRp(h.subtotal) + '</strong></div>' +
         (parseFloat(h.diskon) > 0 ? '<div class="total-row" style="color:var(--warning)"><span>Diskon</span><span>−' + fmtRp(h.diskon) + '</span></div>' : '') +
         '<div class="total-row grand"><span>TOTAL</span><span>' + fmtRp(h.total) + '</span></div>' +
-        (parseFloat(h.dp_paid) > 0 && status !== 'PAID' ? '<div class="total-row paid-amount"><span>DP Dibayar</span><span>' + fmtRp(h.dp_paid) + '</span></div>' : '') +
-        (parseFloat(h.sisa) > 0 ? '<div class="total-row sisa"><span>Sisa Belum Dibayar</span><span>' + fmtRp(h.sisa) + '</span></div>' : '') +
-        (status === 'PAID' ? '<div class="total-row paid-amount"><span>✓ Dibayar Penuh' + (h.metode_bayar ? ' (' + h.metode_bayar + ')' : '') + '</span><span>' + fmtRp(h.total) + '</span></div>' : '') +
       '</div>' +
       (h.catatan ? '<div style="margin-top:16px;padding:12px 16px;background:#FAF6F0;border-radius:8px;font-size:12px;color:var(--muted)"><b>Catatan:</b> ' + h.catatan + '</div>' : '') +
       '<div class="footer-msg">' +
         '<b>Terima kasih</b> sudah memilih Bonsari Coffee.<br>' +
         '<b>30% dari laba bersih</b> dialokasikan untuk <b>Wakaf Produktif Kebun Kopi Ngantang</b> — mendanai TPQ Ruang Santri, pemberdayaan petani lokal, dan ekologi kebun.' +
       '</div>' +
-      '<div class="qr-section">' +
-        '<div class="pay-here-label">💳 Bayar di Sini</div>' +
-        '<div class="pay-sub">Scan QRIS untuk pembayaran · Semua bank & e-wallet</div>' +
-        '<img class="qris-img" src="' + QRIS_IMG + '" alt="QRIS BONS CAFE" />' +
-        '<div class="qris-meta"><b>BONS CAFE</b> · QRIS BNI · NMID ID10265005997343<br>Nota ' + h.id + ' · ' + fmtRp(parseFloat(h.sisa) > 0 ? h.sisa : h.total) + '</div>' +
-      '</div>' +
+      paymentSectionHtml(h, status) +
     '</div>' +
     '<div class="actions">' +
       '<button class="btn btn-warning" onclick="downloadJPG(\'' + h.id + '\')">📥 Download JPG</button>' +
@@ -214,6 +218,49 @@ function renderNota(h, items) {
       '<button class="btn btn-success" onclick="shareWA()">📱 Share WhatsApp</button>' +
       '<button class="btn btn-secondary" onclick="copyLink()">🔗 Copy Link</button>' +
     '</div>';
+}
+
+function paymentSectionHtml(h, status) {
+  if (status === 'PAID') {
+    // LUNAS stamp — no QR, customer ga perlu bayar lagi
+    const paidDate = fmtDate(h.paid_date || h.tanggal);
+    const metode = h.metode_bayar ? ' via <b>' + h.metode_bayar + '</b>' : '';
+    return '<div class="paid-stamp-section">' +
+      '<div class="lunas-stamp">' +
+        '<div class="stamp-text">LUNAS</div>' +
+        '<div class="stamp-sub">PAID IN FULL</div>' +
+      '</div>' +
+      '<div class="paid-info">' +
+        'Dibayar penuh tanggal <b>' + paidDate + '</b>' + metode + '<br>' +
+        'Nota ' + h.id + ' · ' + fmtRp(h.total) +
+      '</div>' +
+    '</div>';
+  }
+  // PARTIAL atau UNPAID — tampilkan QRIS
+  const sisa = parseFloat(h.sisa) || parseFloat(h.total) || 0;
+  const dpPaid = parseFloat(h.dp_paid) || 0;
+  const isPartial = status === 'PARTIAL';
+  const label = isPartial ? '💳 Bayar Sisa di Sini' : '💳 Bayar di Sini';
+  const sub = isPartial ? 'Scan QRIS untuk pelunasan' : 'Scan QRIS untuk pembayaran · Semua bank & e-wallet';
+  let breakdownHtml = '';
+  if (isPartial && dpPaid > 0) {
+    const dpDate = h.paid_date ? fmtDate(h.paid_date) : (h.tanggal ? fmtDate(h.tanggal) : '');
+    const dpMetode = h.metode_bayar ? ' · ' + h.metode_bayar : '';
+    breakdownHtml = '<div class="pay-breakdown">' +
+      '<div class="row"><span>Total Nota</span><span>' + fmtRp(h.total) + '</span></div>' +
+      '<div class="row dp-row"><span>✓ DP Dibayar' + (dpDate ? ' (' + dpDate + dpMetode + ')' : '') + '</span><span>−' + fmtRp(dpPaid) + '</span></div>' +
+      '<div class="row sisa-row"><span>Sisa Bayar</span><span>' + fmtRp(sisa) + '</span></div>' +
+    '</div>';
+  }
+  return '<div class="qr-section">' +
+    '<div class="pay-here-label">' + label + '</div>' +
+    '<div class="pay-sub">' + sub + '</div>' +
+    breakdownHtml +
+    '<img class="qris-img" src="' + QRIS_IMG + '" alt="QRIS BONS CAFE" />' +
+    '<div class="qris-meta"><b>BONS CAFE</b> · QRIS BNI · NMID ID10265005997343<br>' +
+      'Nota ' + h.id + ' · ' + (isPartial ? 'Bayar Sisa: ' : 'Total: ') + '<b>' + fmtRp(sisa) + '</b>' +
+    '</div>' +
+  '</div>';
 }
 
 function shareWA() {
