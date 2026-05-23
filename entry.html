@@ -267,7 +267,7 @@
       </div>
       <div class="field-row-3">
         <div class="field"><label>📦 Produk</label><select id="gb-product"><option value="">-- Pilih --</option><option value="GBO">GBO (Original/Raw)</option><option value="GBC">GBC (Special)</option><option value="GBP">GBP (Premium)</option><option value="GBL">GBL (Lanang)</option><option value="GBS">GBS (Sorted)*</option></select></div>
-        <div class="field"><label>⚖️ Qty (KG)</label><input type="number" id="gb-qty" step="0.01" min="0.01" placeholder="0.00" /></div>
+        <div class="field"><label>⚖️ Qty (KG)</label><input type="number" id="gb-qty" step="any" min="0.01" placeholder="0.00" inputmode="decimal" /></div>
         <div class="field"><label>💰 Harga/KG</label><input type="number" id="gb-price" step="1000" placeholder="0" /></div>
       </div>
       <div class="price-chips" id="gb-price-chips"></div>
@@ -360,13 +360,13 @@
       <div class="form-sub">Catat cash flow keluar. Pembelian GB auto-update stock.</div>
       <div class="field-row">
         <div class="field"><label>📅 Tanggal</label><input type="date" id="exp-date" /></div>
-        <div class="field"><label>🏷️ Kategori</label><select id="exp-kategori" onchange="onKategoriChange()"><option value="">-- Pilih --</option><option value="Pembelian Green Bean">📥 Pembelian Green Bean</option><option value="Sortir">🌿 Sortir</option><option value="Roasting">🔥 Roasting</option><option value="Operasional">⚙️ Operasional</option><option value="Investasi Alat">🔧 Investasi Alat</option></select></div>
+        <div class="field"><label>🏷️ Kategori</label><select id="exp-kategori" onchange="onKategoriChange()"><option value="">-- Pilih --</option><option value="Pembelian Green Bean">📥 Pembelian Green Bean</option><option value="Sortir">🌿 Sortir</option><option value="Roasting">🔥 Roasting</option><option value="Operasional">⚙️ Operasional</option><option value="Investasi Alat">🔧 Investasi Alat</option><option value="Kontribusi Sosial">🌱 Kontribusi Sosial · Wakaf</option></select></div>
       </div>
       <div class="field"><label>📝 Deskripsi</label><input type="text" id="exp-desc" placeholder="Pertamax sortir, Gas roasting..." /></div>
       <div class="field-row-3">
         <div class="field"><label>💰 Total (Rp)</label><input type="number" id="exp-amount" step="1000" placeholder="0" /></div>
         <div class="field" id="exp-supplier-field" style="display:none"><label>👤 Supplier</label><input type="text" id="exp-supplier" list="suppliers-list" /></div>
-        <div class="field" id="exp-qty-field" style="display:none"><label>⚖️ Qty (KG)</label><input type="number" id="exp-qty" step="0.01" placeholder="0.00" /></div>
+        <div class="field" id="exp-qty-field" style="display:none"><label>⚖️ Qty (KG)</label><input type="number" id="exp-qty" step="any" placeholder="0.00" inputmode="decimal" /></div>
       </div>
       <div class="auto-field" id="exp-extra-info" style="display:none"><span class="auto-label">📊 Harga/KG (auto):</span><span class="auto-value" id="exp-price-per-kg">—</span></div>
       <div class="field"><label>📝 Catatan</label><textarea id="exp-note" rows="2"></textarea></div>
@@ -375,7 +375,8 @@
     </div>
     <div class="side-panel">
       <div class="panel-card"><h3>📋 Pending Entries</h3><div class="pending-list" id="pending-pengeluaran"></div></div>
-      <div class="panel-card"><h3>💡 Kategori Guide</h3><div style="font-size:11.5px;color:var(--muted);line-height:1.7"><strong>📥 Pembelian GB</strong>: dari petani — auto-add stock GBO<br/><strong>🌿 Sortir</strong>: bayar Mba Etsa/Pipit<br/><strong>🔥 Roasting</strong>: gas, listrik, kemasan<br/><strong>⚙️ Operasional</strong>: Pertamax, parkir<br/><strong>🔧 Investasi</strong>: alat, mesin</div></div>
+      <div class="panel-card"><h3>💡 Kategori Guide</h3><div style="font-size:11.5px;color:var(--muted);line-height:1.7"><strong>📥 Pembelian GB</strong>: dari petani — auto-add stock GBO<br/><strong>🌿 Sortir</strong>: bayar Mba Etsa/Pipit<br/><strong>🔥 Roasting</strong>: gas, listrik, kemasan<br/><strong>⚙️ Operasional</strong>: Pertamax, parkir<br/><strong>🔧 Investasi</strong>: alat, mesin<br/><strong style="color:#2D5640">🌱 Kontribusi Sosial</strong>: disbursement aktual ke Kebun Wakaf (komitmen 1/3 Net Profit · "One Cup, 3 Impacts")</div></div>
+      <div class="panel-card" style="background:linear-gradient(135deg,#F0F7F4 0%,#E8F4ED 100%);border:1.5px solid #5B9279"><h3 style="color:#2D5640">🌱 Kontribusi Sosial · Sync Info</h3><div style="font-size:11.5px;color:#3F6E55;line-height:1.6">Target komitmen <strong>1/3 Net Profit Bonsari</strong> tracked otomatis di Reading Dashboard (banner "Kontribusi Sosial · Kebun Wakaf Ngantang").<br/><br/>Entry di sini = <strong>disbursement aktual</strong> (transfer real ke kebun wakaf). Auto-sync via API.<br/><br/><em style="font-size:10.5px;color:#5B9279">Bridge: Bonsari "One Cup, 3 Impacts" ↔ Mawrid "Satu mata air, tiga aliran"</em></div></div>
     </div>
   </div>
 </div>
@@ -411,7 +412,7 @@
       </div>
       <div class="field-row">
         <div class="field"><label>📦 Bakalan (Grade Input)</label><select id="srt-bakalan"><option value="GBO">GBO (Original raw)</option><option value="Bakalan GBP">Bakalan GBP</option><option value="Bakalan GBC">Bakalan GBC</option><option value="Bakalan GBL">Bakalan Lanang</option></select></div>
-        <div class="field"><label>⚖️ Qty Input (KG)</label><input type="number" id="srt-input-kg" step="0.01" placeholder="e.g. 30.5" /></div>
+        <div class="field"><label>⚖️ Qty Input (KG)</label><input type="number" id="srt-input-kg" step="any" placeholder="e.g. 30.5" inputmode="decimal" /></div>
       </div>
       <div style="background:#F0F7E8;border-left:3px solid #5B9279;padding:10px 12px;font-size:11.5px;color:#2D5640;margin-top:10px;border-radius:4px">
         💡 Setelah submit: <strong>stok GB akan otomatis berkurang</strong> di tempat, dan <strong>tercatat di tangan pekerja</strong>. Batch ID auto-generated untuk tracking saat kembali.
@@ -433,12 +434,12 @@
       <div class="field"><label>📅 Tgl Setor</label><input type="date" id="srt-tgl-setor" /></div>
       <div style="font-weight:700;color:var(--primary);margin:14px 0 8px;font-size:14px">📤 Output Detail per Grade</div>
       <div class="field-row-3">
-        <div class="field"><label>⭐ GBP</label><input type="number" id="srt-gbp" step="0.001" placeholder="0" /></div>
-        <div class="field"><label>📦 GBC</label><input type="number" id="srt-gbc" step="0.001" placeholder="0" /></div>
-        <div class="field"><label>🍃 GBL</label><input type="number" id="srt-gbl" step="0.001" placeholder="0" /></div>
+        <div class="field"><label>⭐ GBP</label><input type="number" id="srt-gbp" step="any" placeholder="0" inputmode="decimal" /></div>
+        <div class="field"><label>📦 GBC</label><input type="number" id="srt-gbc" step="any" placeholder="0" inputmode="decimal" /></div>
+        <div class="field"><label>🍃 GBL</label><input type="number" id="srt-gbl" step="any" placeholder="0" inputmode="decimal" /></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>📥 GBS</label><input type="number" id="srt-gbs" step="0.001" placeholder="0" /></div>
+        <div class="field"><label>📥 GBS</label><input type="number" id="srt-gbs" step="any" placeholder="0" inputmode="decimal" /></div>
         <div class="field"><label>💰 Ongkos (Rp) <span style="font-size:10px;color:var(--muted)">auto-calc</span></label><input type="number" id="srt-ongkos" step="500" placeholder="auto" /></div>
       </div>
       <div class="margin-display" style="grid-template-columns:repeat(3,1fr)">
@@ -471,7 +472,7 @@
       </div>
       <div class="field-row">
         <div class="field"><label>↕️ Direction</label><select id="adj-direction"><option value="in">+ Found Inventory</option><option value="out">− Loss/Susut</option></select></div>
-        <div class="field"><label>⚖️ Qty (KG)</label><input type="number" id="adj-qty" step="0.01" /></div>
+        <div class="field"><label>⚖️ Qty (KG)</label><input type="number" id="adj-qty" step="any" inputmode="decimal" /></div>
       </div>
       <div class="field"><label>⚠️ Alasan <span style="color:var(--danger)">(min 10 karakter)</span></label><textarea id="adj-reason" rows="3"></textarea></div>
       <div id="adj-validation"></div>
