@@ -22,12 +22,14 @@
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
   .container { max-width: 720px; margin: 0 auto; }
-  .nota-card { background: var(--card); border-radius: 12px; box-shadow: 0 4px 20px rgba(74,44,64,.08); padding: 32px; margin-bottom: 20px; }
+  .nota-card { background: var(--card) url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyODAiIGhlaWdodD0iMjgwIiB2aWV3Qm94PSIwIDAgMjgwIDI4MCI+CiAgPGRlZnM+CiAgICA8c3ltYm9sIGlkPSJiZWFuIiB2aWV3Qm94PSItMTUgLTEwIDMwIDIwIj4KICAgICAgPGVsbGlwc2UgY3g9IjAiIGN5PSIwIiByeD0iMTMiIHJ5PSI4IiBmaWxsPSIjNkI0NDIzIi8+CiAgICAgIDxwYXRoIGQ9Ik0gLTEzIDAgUSAwIC0yLjUgMTMgMCIgc3Ryb2tlPSIjRkFGNkYwIiBzdHJva2Utd2lkdGg9IjEiIGZpbGw9Im5vbmUiLz4KICAgIDwvc3ltYm9sPgogICAgPHN5bWJvbCBpZD0ibGVhZiIgdmlld0JveD0iLTEyIC0yMiAyNCA0NCI+CiAgICAgIDxwYXRoIGQ9Ik0gMCAtMjAgUSA5IC0xMCA5IDAgUSA5IDEyIDAgMjAgUSAtOSAxMiAtOSAwIFEgLTkgLTEwIDAgLTIwIFoiIGZpbGw9IiM2QjhFNUEiLz4KICAgICAgPGxpbmUgeDE9IjAiIHkxPSItMTgiIHgyPSIwIiB5Mj0iMTgiIHN0cm9rZT0iI0ZBRjZGMCIgc3Ryb2tlLXdpZHRoPSIwLjgiLz4KICAgIDwvc3ltYm9sPgogIDwvZGVmcz4KICA8ZyBvcGFjaXR5PSIwLjA3Ij4KICAgIDwhLS0gQmVhbnMgc2NhdHRlcmVkIC0tPgogICAgPHVzZSBocmVmPSIjYmVhbiIgeD0iMzUiIHk9IjUwIiB0cmFuc2Zvcm09InJvdGF0ZSgyMCAzNSA1MCkiLz4KICAgIDx1c2UgaHJlZj0iI2JlYW4iIHg9IjE4MCIgeT0iMzUiIHRyYW5zZm9ybT0icm90YXRlKC0xNSAxODAgMzUpIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSIyNDUiIHk9IjkwIiB0cmFuc2Zvcm09InJvdGF0ZSg0NSAyNDUgOTApIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSI2MCIgeT0iMTgwIiB0cmFuc2Zvcm09InJvdGF0ZSgtMzAgNjAgMTgwKSIvPgogICAgPHVzZSBocmVmPSIjYmVhbiIgeD0iMjAwIiB5PSIyMDAiIHRyYW5zZm9ybT0icm90YXRlKDYwIDIwMCAyMDApIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSIxMjAiIHk9IjI0MCIgdHJhbnNmb3JtPSJyb3RhdGUoLTEwIDEyMCAyNDApIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSIxNSIgeT0iMTIwIiB0cmFuc2Zvcm09InJvdGF0ZSg3NSAxNSAxMjApIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSIyNjAiIHk9IjE2MCIgdHJhbnNmb3JtPSJyb3RhdGUoLTUwIDI2MCAxNjApIi8+CiAgICA8dXNlIGhyZWY9IiNiZWFuIiB4PSIxNDAiIHk9IjEzMCIgdHJhbnNmb3JtPSJyb3RhdGUoMjUgMTQwIDEzMCkiLz4KICAgIDwhLS0gTGVhdmVzIHNjYXR0ZXJlZCAtLT4KICAgIDx1c2UgaHJlZj0iI2xlYWYiIHg9IjEwMCIgeT0iNjAiIHRyYW5zZm9ybT0icm90YXRlKC0yNSAxMDAgNjApIi8+CiAgICA8dXNlIGhyZWY9IiNsZWFmIiB4PSIyMjAiIHk9IjEyMCIgdHJhbnNmb3JtPSJyb3RhdGUoMzUgMjIwIDEyMCkiLz4KICAgIDx1c2UgaHJlZj0iI2xlYWYiIHg9IjUwIiB5PSIyMzAiIHRyYW5zZm9ybT0icm90YXRlKC01MCA1MCAyMzApIi8+CiAgICA8dXNlIGhyZWY9IiNsZWFmIiB4PSIxNzAiIHk9IjgwIiB0cmFuc2Zvcm09InJvdGF0ZSgxNSAxNzAgODApIi8+CiAgICA8dXNlIGhyZWY9IiNsZWFmIiB4PSIyMzAiIHk9IjI0NSIgdHJhbnNmb3JtPSJyb3RhdGUoLTIwIDIzMCAyNDUpIi8+CiAgICA8dXNlIGhyZWY9IiNsZWFmIiB4PSI4MCIgeT0iMTEwIiB0cmFuc2Zvcm09InJvdGF0ZSg3MCA4MCAxMTApIi8+CiAgICA8dXNlIGhyZWY9IiNsZWFmIiB4PSIyNSIgeT0iMTkwIiB0cmFuc2Zvcm09InJvdGF0ZSgtNjUgMjUgMTkwKSIvPgogIDwvZz4KPC9zdmc+") repeat; background-blend-mode: normal; border-radius: 12px; box-shadow: 0 4px 20px rgba(74,44,64,.08); padding: 32px; margin-bottom: 20px; position: relative; } .nota-card > * { position: relative; z-index: 1; }
   .nota-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--accent); padding-bottom: 20px; margin-bottom: 24px; }
   .logo-section { display: flex; align-items: center; gap: 14px; }
-  .logo-section img { width: 64px; height: 64px; }
+  .logo-section img { width: 96px; height: 96px; }
   .brand { font-size: 22px; font-weight: 800; color: var(--plum); letter-spacing: -0.3px; }
-  .brand-sub { font-size: 11px; color: var(--muted); font-style: italic; margin-top: 2px; }
+  .brand-sub { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 4px; line-height: 1.5; }
+  .brand-sub .tagline { color: var(--plum); font-weight: 600; font-style: normal; font-size: 13px; }
+  .brand-sub .addr { font-size: 10.5px; color: var(--muted); margin-top: 2px; display: block; }
   .nota-meta { text-align: right; }
   .nota-id { font-size: 18px; font-weight: 700; color: var(--plum); font-family: 'SF Mono', monospace; }
   .nota-date { font-size: 13px; color: var(--muted); margin-top: 4px; }
@@ -183,7 +185,7 @@ function renderNota(h, items) {
           '<img src="' + LOGO + '" alt="Bonsari Coffee">' +
           '<div>' +
             '<div class="brand">BONSARI COFFEE</div>' +
-            '<div class="brand-sub">Specialty Robusta · 30% Wakaf Sosial</div>' +
+            '<div class="brand-sub">' +'<span class="tagline">Specialty Robusta Ngantang &mdash; 1 Cup, 3 Impacts</span>' +'<span class="addr">Villa Sengkaling Blok L-66, Dau, Malang, Jatim</span>' +'</div>' +
           '</div>' +
         '</div>' +
         '<div class="nota-meta">' +
@@ -207,8 +209,7 @@ function renderNota(h, items) {
       '</div>' +
       (h.catatan ? '<div style="margin-top:16px;padding:12px 16px;background:#FAF6F0;border-radius:8px;font-size:12px;color:var(--muted)"><b>Catatan:</b> ' + h.catatan + '</div>' : '') +
       '<div class="footer-msg">' +
-        '<b>Terima kasih</b> sudah memilih Bonsari Coffee.<br>' +
-        '<b>30% dari laba bersih</b> dialokasikan untuk <b>Wakaf Produktif Kebun Kopi Ngantang</b> — mendanai TPQ Ruang Santri, pemberdayaan petani lokal, dan ekologi kebun.' +
+        'Dengan memilih Bonsari Coffee, Anda tidak hanya membeli kopi&mdash;Anda juga membuat perubahan. <b>30% dari laba bersih Bonsari Coffee</b> dialokasikan untuk <b>TPQ Darul Mujtaba</b>, peningkatan perekonomian masyarakat, pendidikan, dan dakwah. Pembelian Anda membantu mendanai layanan sosial dan program <b>"Wakaf Produktif"</b> di perkebunan kopi kami.' +
       '</div>' +
       paymentSectionHtml(h, status) +
     '</div>' +
