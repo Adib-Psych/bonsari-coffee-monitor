@@ -204,6 +204,9 @@ function doPost(e) {
       case 'edit_nota_header':
         result = handleEditNotaHeader_(ss, body);
         break;
+      case 'edit_nota_full':
+        result = handleEditNotaFull_(ss, body);
+        break;
       case 'delete_nota':
         result = handleDeleteNota_(ss, body);
         break;
@@ -1328,4 +1331,194 @@ function handleDeleteNota_(ss, body) {
     if (rowsToDelete.length > 0) report.push(sn + ': deleted ' + rowsToDelete.length);
   });
   return { ok: true, nota_id: notaId, result: report.join(' | ') };
+}
+
+/**
+ * V8.5 — FULL edit nota: header + items (replace) + payment, atomic.
+ * Body: {
+ *   nota_id,
+ *   confirm: 'YES_EDIT_' + nota_id,            // safety token
+ *   header: { customer?, customer_type?, tanggal?, catatan? },
+ *   items:  [ { type:'sales-gb'|'sales-rb'|'sales-misc', produk/label, qty/packs, harga_per_kg/harga_per_pack, total_sales?, catatan? }, ... ],
+ *   payment:{ status_payment?, dp_paid?, metode_bayar?, paid_date?, diskon? }
+ * }
+ * Strategy: delete all linked rows in Sales_GB/Sales_RB/Nota_Misc, re-insert from items array,
+ *           recompute subtotal/total/sisa, update Nota header fields atomically.
+ */
+function handleEditNotaFull_(ss, body) {
+  const notaId = body.nota_id;
+  if (!notaId) return { ok: false, error: 'nota_id wajib' };
+  const expectedConfirm = 'YES_EDIT_' + notaId;
+  if (body.confirm !== expectedConfirm) {
+    return { ok: false, error: 'confirm token salah. Expected: ' + expectedConfirm };
+  }
+  const items = body.items || [];
+  if (!items.length) return { ok: false, error: 'items wajib min 1 (untuk hapus pakai delete_nota)' };
+
+  const notaSheet = ss.getSheetByName(SHEETS.NOTA);
+  if (!notaSheet) return { ok: false, error: 'Nota sheet not found' };
+  const nHeaders = notaSheet.getRange(1,1,1,notaSheet.getLastColumn()).getValues()[0];
+  const lr = notaSheet.getLastRow();
+  if (lr < 2) return { ok: false, error: 'Nota sheet empty' };
+  const ids = notaSheet.getRange(2, 1, lr-1, 1).getValues().map(r => r[0]);
+  const idx = ids.indexOf(notaId);
+  if (idx < 0) return { ok: false, error: 'nota_id ' + notaId + ' not found' };
+  const sheetRow = idx + 2;
+  const currentRow = notaSheet.getRange(sheetRow, 1, 1, nHeaders.length).getValues()[0];
+  const currentMap = {};
+  nHeaders.forEach((h, i) => { currentMap[h] = currentRow[i]; });
+
+  const header = body.header || {};
+  const payment = body.payment || {};
+  const customer = header.customer !== undefined ? header.customer : currentMap.customer;
+  const customerType = header.customer_type !== undefined ? header.customer_type : currentMap.customer_type;
+  const tanggal = header.tanggal !== undefined ? header.tanggal : (currentMap.tanggal instanceof Date ? Utilities.formatDate(currentMap.tanggal,'GMT+7','yyyy-MM-dd') : currentMap.tanggal);
+  const catatan = header.catatan !== undefined ? header.catatan : (currentMap.catatan || '');
+
+  const report = [];
+
+  // 1. DELETE all existing linked items
+  ['SALES_GB', 'SALES_RB', 'NOTA_MISC'].forEach(sn => {
+    const sh = ss.getSheetByName(SHEETS[sn]);
+    if (!sh) return;
+    const sHeaders = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
+    const notaCol = sHeaders.indexOf('nota_id');
+    if (notaCol < 0) return;
+    const slr = sh.getLastRow();
+    if (slr < 2) return;
+    const data = sh.getRange(2, notaCol+1, slr-1, 1).getValues();
+    const rowsToDelete = [];
+    data.forEach((row, i) => { if (row[0] === notaId) rowsToDelete.push(i + 2); });
+    rowsToDelete.reverse().forEach(r => sh.deleteRow(r));
+    if (rowsToDelete.length > 0) report.push(sn + ' deleted ' + rowsToDelete.length);
+  });
+
+  // 2. RE-INSERT items, compute subtotal
+  let subtotal = 0;
+  const insertedIds = [];
+  items.forEach((it, i) => {
+    const type = (it.type || '').toLowerCase();
+    const itemId = it.id || ('NTI_' + Date.now() + '_' + i);
+    const qty = parseFloat(it.qty || it.packs || 1) || 1;
+    const harga = parseFloat(it.harga_per_pack || it.harga_per_kg || 0) || 0;
+    const lineSales = parseFloat(it.total_sales) || (harga * qty);
+    subtotal += lineSales;
+
+    if (type === 'sales-misc' || type === 'misc' || type === 'custom') {
+      const sheet = ensureSheet_(ss, SHEETS.NOTA_MISC, NOTA_MISC_HEADERS);
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'label') return it.label || it.produk || 'Misc';
+        if (h === 'qty') return qty;
+        if (h === 'harga_per_pack') return harga;
+        if (h === 'total_sales') return lineSales;
+        if (h === 'catatan') return it.catatan || '';
+        if (h === 'created_at') return new Date().toISOString();
+        return '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Nota_Misc', id: itemId });
+    } else if (type === 'sales-gb' || type === 'gb') {
+      const sheet = ensureSheetWithColumn_(ss, SHEETS.SALES_GB, 'nota_id');
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'created') return new Date().toISOString();
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'type') return 'sales-gb';
+        if (h === 'status') return 'synced';
+        if (h === 'synced_at') return new Date().toISOString();
+        if (h === 'qty') return qty;
+        if (h === 'harga_per_kg') return harga;
+        if (h === 'total_sales') return lineSales;
+        return it[h] !== undefined ? it[h] : '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Sales_GB', id: itemId });
+    } else {
+      const sheet = ensureSheetWithColumn_(ss, SHEETS.SALES_RB, 'nota_id');
+      const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+      const row = headers.map(h => {
+        if (h === 'id') return itemId;
+        if (h === 'nota_id') return notaId;
+        if (h === 'created') return new Date().toISOString();
+        if (h === 'tanggal') return tanggal;
+        if (h === 'customer') return customer;
+        if (h === 'customer_type') return customerType;
+        if (h === 'type') return 'sales-rb';
+        if (h === 'status') return 'synced';
+        if (h === 'synced_at') return new Date().toISOString();
+        if (h === 'packs') return qty;
+        if (h === 'harga_per_pack') return harga;
+        if (h === 'total_sales') return lineSales;
+        return it[h] !== undefined ? it[h] : '';
+      });
+      sheet.appendRow(row);
+      insertedIds.push({ sheet: 'Sales_RB', id: itemId });
+    }
+  });
+
+  // 3. Recompute totals
+  const diskon = payment.diskon !== undefined ? parseFloat(payment.diskon) || 0 : (parseFloat(currentMap.diskon) || 0);
+  const total = subtotal - diskon;
+  let dpPaid = payment.dp_paid !== undefined ? parseFloat(payment.dp_paid) || 0 : (parseFloat(currentMap.dp_paid) || 0);
+  if (dpPaid > total) dpPaid = total;
+  const sisa = Math.max(0, total - dpPaid);
+
+  // 4. Determine status — explicit if provided, else auto-derive
+  let status = (payment.status_payment || '').toUpperCase();
+  if (!status) {
+    if (dpPaid >= total - 0.01) status = 'PAID';
+    else if (dpPaid > 0) status = 'PARTIAL';
+    else status = 'UNPAID';
+  }
+  if (status === 'PAID') dpPaid = total;
+
+  const paidDate = status === 'PAID'
+    ? (payment.paid_date || (currentMap.paid_date instanceof Date ? Utilities.formatDate(currentMap.paid_date,'GMT+7','yyyy-MM-dd') : currentMap.paid_date) || tanggal)
+    : (payment.paid_date !== undefined ? payment.paid_date : '');
+  const metodeBayar = payment.metode_bayar !== undefined ? payment.metode_bayar : (currentMap.metode_bayar || '');
+
+  // 5. Update Nota header row atomically
+  const updates = {
+    customer: customer,
+    customer_type: customerType,
+    tanggal: tanggal,
+    catatan: catatan,
+    subtotal: subtotal,
+    diskon: diskon,
+    total: total,
+    dp_paid: dpPaid,
+    sisa: status === 'PAID' ? 0 : sisa,
+    status_payment: status,
+    paid_date: paidDate,
+    metode_bayar: metodeBayar,
+    item_count: items.length
+  };
+  Object.keys(updates).forEach(field => {
+    const c = nHeaders.indexOf(field) + 1;
+    if (c > 0) notaSheet.getRange(sheetRow, c).setValue(updates[field]);
+  });
+
+  return {
+    ok: true,
+    nota_id: notaId,
+    subtotal: subtotal,
+    diskon: diskon,
+    total: total,
+    dp_paid: dpPaid,
+    sisa: status === 'PAID' ? 0 : sisa,
+    status: status,
+    items_count: items.length,
+    items_inserted: insertedIds,
+    cleanup: report.join(' | ')
+  };
 }

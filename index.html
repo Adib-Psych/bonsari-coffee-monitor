@@ -2307,26 +2307,274 @@ async function renderNotaTab() {
   }).join('');
 }
 
-// V8.4 — Full edit with prompts (simple, no modal needed)
+// V8.5 — Modal-based full edit: Header + Items + Payment (atomic)
 async function editNota(notaId) {
   const nota = (D.nota || []).find(n => n.id === notaId);
   if (!nota) { alert('Nota ' + notaId + ' tidak ditemukan'); return; }
-  const newCustomer = prompt('Edit Customer untuk ' + notaId + ':', nota.customer || '');
-  if (newCustomer === null) return;
-  const newCatatan = prompt('Edit Catatan (boleh kosong):', nota.catatan || '');
-  if (newCatatan === null) return;
-  const newTanggal = prompt('Edit Tanggal (YYYY-MM-DD):', nota.tanggal || '');
-  if (newTanggal === null) return;
-  const payload = { action: 'edit_nota_header', nota_id: notaId };
-  if (newCustomer.trim() && newCustomer !== nota.customer) payload.customer = newCustomer.trim();
-  if (newCatatan !== nota.catatan) payload.catatan = newCatatan;
-  if (newTanggal && newTanggal !== nota.tanggal && /^\d{4}-\d{2}-\d{2}$/.test(newTanggal)) payload.tanggal = newTanggal;
-  if (Object.keys(payload).length <= 2) { alert('Tidak ada perubahan'); return; }
+  // Fetch full detail (header + items) from Apps Script
+  let detail = null;
   try {
-    const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
+    const r = await fetch(API_URL + '?nota=' + encodeURIComponent(notaId) + '&t=' + Date.now());
+    detail = await r.json();
+  } catch(e) { alert('Gagal load detail: ' + e.message); return; }
+  if (!detail || !detail.ok) { alert('Gagal load: ' + (detail && detail.error || 'unknown')); return; }
+
+  const items = (detail.items || []).map(it => {
+    const sheet = it._sheet || '';
+    let type = 'sales-rb';
+    if (sheet === 'SALES_GB') type = 'sales-gb';
+    else if (sheet === 'NOTA_MISC') type = 'sales-misc';
+    const qty = parseFloat(it.qty || it.packs || 0) || 0;
+    const harga = parseFloat(it.harga_per_kg || it.harga_per_pack || 0) || 0;
+    return {
+      _orig_id: it.id,
+      type: type,
+      label: it.label || it.produk || it.grade || '',
+      grade: it.grade || '',
+      produk: it.produk || '',
+      qty: qty,
+      harga: harga,
+      total_sales: parseFloat(it.total_sales || 0) || (qty * harga),
+      catatan: it.catatan || ''
+    };
+  });
+
+  const h = detail.header || {};
+  __notaEditState = {
+    nota_id: notaId,
+    header: {
+      customer: h.customer || '',
+      customer_type: h.customer_type || 'Retail',
+      tanggal: h.tanggal || new Date().toISOString().slice(0,10),
+      catatan: h.catatan || ''
+    },
+    payment: {
+      status_payment: h.status_payment || 'UNPAID',
+      dp_paid: parseFloat(h.dp_paid || 0) || 0,
+      diskon: parseFloat(h.diskon || 0) || 0,
+      metode_bayar: h.metode_bayar || '',
+      paid_date: h.paid_date || ''
+    },
+    items: items
+  };
+  __renderEditNotaModal();
+}
+
+let __notaEditState = null;
+
+function __renderEditNotaModal() {
+  const s = __notaEditState;
+  if (!s) return;
+  let overlay = document.getElementById('nota-edit-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'nota-edit-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,30,45,.78);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px 16px;overflow-y:auto;backdrop-filter:blur(2px)';
+    document.body.appendChild(overlay);
+  }
+
+  // Compute live totals
+  const subtotal = s.items.reduce((a,it) => a + (parseFloat(it.total_sales) || (parseFloat(it.qty)||0) * (parseFloat(it.harga)||0)), 0);
+  const diskon = parseFloat(s.payment.diskon) || 0;
+  const total = subtotal - diskon;
+  let dp = parseFloat(s.payment.dp_paid) || 0;
+  if (dp > total) dp = total;
+  const sisa = Math.max(0, total - dp);
+  let autoStatus = s.payment.status_payment;
+  if (!autoStatus || autoStatus === 'AUTO') {
+    if (dp >= total - 0.01) autoStatus = 'PAID';
+    else if (dp > 0) autoStatus = 'PARTIAL';
+    else autoStatus = 'UNPAID';
+  }
+
+  const itemRows = s.items.map((it, i) => {
+    const typeLabel = it.type === 'sales-gb' ? 'Green Bean' : (it.type === 'sales-misc' ? 'Misc/Custom' : 'Roast Bean / Ground');
+    const qtyLabel = it.type === 'sales-gb' ? 'KG' : (it.type === 'sales-misc' ? 'unit' : 'pack');
+    const lineTotal = (parseFloat(it.qty)||0) * (parseFloat(it.harga)||0);
+    return '<tr style="border-bottom:1px solid #E8DCC0">' +
+      '<td style="padding:6px"><select onchange="__editItemField(' + i + ',\'type\',this.value)" style="width:100%;padding:5px;font-size:12px;border:1px solid #ccc;border-radius:4px">' +
+        '<option value="sales-gb"' + (it.type==='sales-gb'?' selected':'') + '>Green Bean</option>' +
+        '<option value="sales-rb"' + (it.type==='sales-rb'?' selected':'') + '>Roast Bean / Ground</option>' +
+        '<option value="sales-misc"' + (it.type==='sales-misc'?' selected':'') + '>Misc / Custom</option>' +
+      '</select></td>' +
+      '<td style="padding:6px"><input type="text" value="' + (it.label || it.produk || it.grade || '').toString().replace(/"/g,'&quot;') + '" onchange="__editItemField(' + i + ',\'label\',this.value)" placeholder="Produk / Grade / Label" style="width:100%;padding:5px;font-size:12px;border:1px solid #ccc;border-radius:4px"></td>' +
+      '<td style="padding:6px;text-align:right"><input type="number" step="0.001" value="' + it.qty + '" onchange="__editItemField(' + i + ',\'qty\',this.value)" style="width:75px;padding:5px;font-size:12px;border:1px solid #ccc;border-radius:4px;text-align:right"><div style="font-size:9px;color:#888">' + qtyLabel + '</div></td>' +
+      '<td style="padding:6px;text-align:right"><input type="number" step="100" value="' + it.harga + '" onchange="__editItemField(' + i + ',\'harga\',this.value)" style="width:100px;padding:5px;font-size:12px;border:1px solid #ccc;border-radius:4px;text-align:right"><div style="font-size:9px;color:#888">Rp/' + qtyLabel + '</div></td>' +
+      '<td style="padding:6px;text-align:right;font-weight:600;color:#7B3F61;font-size:12px">Rp ' + Math.round(lineTotal).toLocaleString('id-ID') + '</td>' +
+      '<td style="padding:6px;text-align:center"><button onclick="__removeItem(' + i + ')" style="padding:4px 8px;background:#B85C5C;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer">✕</button></td>' +
+    '</tr>';
+  }).join('');
+
+  overlay.innerHTML =
+    '<div style="background:#FDFBF6;border-radius:12px;width:100%;max-width:920px;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden">' +
+      // Title bar
+      '<div style="background:linear-gradient(135deg,#7B3F61,#5B2E48);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center">' +
+        '<div><div style="font-size:11px;opacity:.85;letter-spacing:.5px">EDIT NOTA · V8.5</div><div style="font-size:18px;font-weight:700;margin-top:2px">' + s.nota_id + '</div></div>' +
+        '<button onclick="__closeEditModal()" style="background:transparent;border:1px solid #fff;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:13px">✕ Tutup</button>' +
+      '</div>' +
+      // Body
+      '<div style="padding:18px 20px;max-height:calc(100vh - 160px);overflow-y:auto">' +
+        // Section 1: Header
+        '<div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:14px;border-left:4px solid #7B3F61">' +
+          '<div style="font-size:11px;font-weight:700;color:#7B3F61;letter-spacing:.8px;margin-bottom:10px">📋 HEADER</div>' +
+          '<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:8px">' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Customer</label><input type="text" value="' + (s.header.customer||'').replace(/"/g,'&quot;') + '" onchange="__notaEditState.header.customer=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px"></div>' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Tipe</label><select onchange="__notaEditState.header.customer_type=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px">' +
+              '<option value="Retail"' + (s.header.customer_type==='Retail'?' selected':'') + '>Retail</option>' +
+              '<option value="Wholesale"' + (s.header.customer_type==='Wholesale'?' selected':'') + '>Wholesale</option>' +
+              '<option value="Cafe"' + (s.header.customer_type==='Cafe'?' selected':'') + '>Cafe</option>' +
+              '<option value="Roaster"' + (s.header.customer_type==='Roaster'?' selected':'') + '>Roaster</option>' +
+            '</select></div>' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Tanggal</label><input type="date" value="' + (s.header.tanggal||'') + '" onchange="__notaEditState.header.tanggal=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px"></div>' +
+          '</div>' +
+          '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Catatan</label><textarea onchange="__notaEditState.header.catatan=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px;min-height:36px;resize:vertical;font-family:inherit">' + (s.header.catatan||'').replace(/</g,'&lt;') + '</textarea></div>' +
+        '</div>' +
+        // Section 2: Items
+        '<div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:14px;border-left:4px solid #E89F4D">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+            '<div style="font-size:11px;font-weight:700;color:#E89F4D;letter-spacing:.8px">🛒 ITEMS (' + s.items.length + ')</div>' +
+            '<button onclick="__addItem()" style="padding:6px 12px;background:#E89F4D;color:white;border:none;border-radius:5px;font-size:12px;cursor:pointer;font-weight:600">+ Tambah Item</button>' +
+          '</div>' +
+          '<div style="overflow-x:auto">' +
+            '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:680px">' +
+              '<thead style="background:#F5E6D3"><tr>' +
+                '<th style="padding:6px;text-align:left;width:130px">Tipe</th>' +
+                '<th style="padding:6px;text-align:left">Produk / Label</th>' +
+                '<th style="padding:6px;text-align:right;width:90px">Qty</th>' +
+                '<th style="padding:6px;text-align:right;width:115px">Harga</th>' +
+                '<th style="padding:6px;text-align:right;width:110px">Subtotal</th>' +
+                '<th style="padding:6px;text-align:center;width:40px"></th>' +
+              '</tr></thead>' +
+              '<tbody>' + (itemRows || '<tr><td colspan="6" style="padding:16px;text-align:center;color:#999">Belum ada item. Klik "+ Tambah Item"</td></tr>') + '</tbody>' +
+            '</table>' +
+          '</div>' +
+        '</div>' +
+        // Section 3: Payment
+        '<div style="background:#fff;border-radius:8px;padding:14px 16px;margin-bottom:14px;border-left:4px solid #5B9279">' +
+          '<div style="font-size:11px;font-weight:700;color:#5B9279;letter-spacing:.8px;margin-bottom:10px">💰 PAYMENT</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Status (auto)</label><select onchange="__notaEditState.payment.status_payment=this.value;__renderEditNotaModal()" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px">' +
+              '<option value="AUTO"' + (s.payment.status_payment==='AUTO'?' selected':'') + '>Auto (dari DP)</option>' +
+              '<option value="UNPAID"' + (s.payment.status_payment==='UNPAID'?' selected':'') + '>UNPAID</option>' +
+              '<option value="PARTIAL"' + (s.payment.status_payment==='PARTIAL'?' selected':'') + '>PARTIAL</option>' +
+              '<option value="PAID"' + (s.payment.status_payment==='PAID'?' selected':'') + '>PAID (Lunas)</option>' +
+            '</select><div style="font-size:10px;color:#888;margin-top:2px">→ <b>' + autoStatus + '</b></div></div>' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">DP Dibayar (Rp)</label><input type="number" step="500" value="' + dp + '" onchange="__notaEditState.payment.dp_paid=parseFloat(this.value)||0;__renderEditNotaModal()" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px;text-align:right"></div>' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Metode Bayar</label><select onchange="__notaEditState.payment.metode_bayar=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px">' +
+              '<option value=""' + (!s.payment.metode_bayar?' selected':'') + '>-</option>' +
+              '<option value="Cash"' + (s.payment.metode_bayar==='Cash'?' selected':'') + '>Cash</option>' +
+              '<option value="Transfer"' + (s.payment.metode_bayar==='Transfer'?' selected':'') + '>Transfer</option>' +
+              '<option value="QRIS"' + (s.payment.metode_bayar==='QRIS'?' selected':'') + '>QRIS</option>' +
+              '<option value="Mixed"' + (s.payment.metode_bayar==='Mixed'?' selected':'') + '>Mixed</option>' +
+            '</select></div>' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Tanggal Lunas</label><input type="date" value="' + (s.payment.paid_date||'') + '" onchange="__notaEditState.payment.paid_date=this.value" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px"></div>' +
+          '</div>' +
+          '<div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+            '<div><label style="font-size:11px;color:#666;display:block;margin-bottom:3px">Diskon (Rp)</label><input type="number" step="500" value="' + diskon + '" onchange="__notaEditState.payment.diskon=parseFloat(this.value)||0;__renderEditNotaModal()" style="width:100%;padding:7px;font-size:13px;border:1px solid #ccc;border-radius:5px;text-align:right"></div>' +
+          '</div>' +
+        '</div>' +
+        // Section 4: Totals summary
+        '<div style="background:linear-gradient(135deg,#7B3F61,#5B2E48);color:#fff;border-radius:8px;padding:14px 16px;margin-bottom:14px">' +
+          '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;text-align:center">' +
+            '<div><div style="font-size:10px;opacity:.8">Subtotal</div><div style="font-size:14px;font-weight:700">Rp ' + Math.round(subtotal).toLocaleString('id-ID') + '</div></div>' +
+            '<div><div style="font-size:10px;opacity:.8">Diskon</div><div style="font-size:14px;font-weight:700">- ' + Math.round(diskon).toLocaleString('id-ID') + '</div></div>' +
+            '<div><div style="font-size:10px;opacity:.8">TOTAL</div><div style="font-size:16px;font-weight:800;color:#FFD68F">Rp ' + Math.round(total).toLocaleString('id-ID') + '</div></div>' +
+            '<div><div style="font-size:10px;opacity:.8">DP Dibayar</div><div style="font-size:14px;font-weight:700;color:#A8D8A8">Rp ' + Math.round(dp).toLocaleString('id-ID') + '</div></div>' +
+            '<div><div style="font-size:10px;opacity:.8">SISA</div><div style="font-size:16px;font-weight:800;color:' + (sisa>0?'#FFB8B8':'#A8D8A8') + '">Rp ' + Math.round(sisa).toLocaleString('id-ID') + '</div></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      // Footer buttons
+      '<div style="padding:14px 20px;background:#F5E6D3;border-top:1px solid #E8DCC0;display:flex;justify-content:flex-end;gap:10px">' +
+        '<button onclick="__closeEditModal()" style="padding:9px 18px;background:#fff;color:#666;border:1px solid #ccc;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600">Batal</button>' +
+        '<button onclick="__saveEditNota()" style="padding:9px 22px;background:#7B3F61;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700">💾 Simpan Perubahan</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function __editItemField(i, field, val) {
+  if (!__notaEditState || !__notaEditState.items[i]) return;
+  if (field === 'qty' || field === 'harga') {
+    __notaEditState.items[i][field] = parseFloat(val) || 0;
+    __notaEditState.items[i].total_sales = __notaEditState.items[i].qty * __notaEditState.items[i].harga;
+  } else {
+    __notaEditState.items[i][field] = val;
+  }
+  __renderEditNotaModal();
+}
+
+function __removeItem(i) {
+  if (!__notaEditState) return;
+  if (!confirm('Hapus item ke-' + (i+1) + ' (' + (__notaEditState.items[i].label || '(no label)') + ')?')) return;
+  __notaEditState.items.splice(i, 1);
+  __renderEditNotaModal();
+}
+
+function __addItem() {
+  if (!__notaEditState) return;
+  __notaEditState.items.push({
+    type: 'sales-rb', label: '', qty: 1, harga: 0, total_sales: 0, catatan: ''
+  });
+  __renderEditNotaModal();
+}
+
+function __closeEditModal() {
+  const o = document.getElementById('nota-edit-overlay');
+  if (o) o.remove();
+  __notaEditState = null;
+}
+
+async function __saveEditNota() {
+  if (!__notaEditState) return;
+  const s = __notaEditState;
+  // Validate items
+  if (!s.items.length) { alert('Minimal 1 item. Untuk hapus nota, pakai tombol ✕ di list.'); return; }
+  for (let i=0; i<s.items.length; i++) {
+    const it = s.items[i];
+    if (!it.label || !(parseFloat(it.qty)>0) || !(parseFloat(it.harga)>=0)) {
+      alert('Item ke-' + (i+1) + ' invalid: label kosong atau qty/harga tidak valid.');
+      return;
+    }
+  }
+
+  // Build payload — convert items shape for backend
+  const payload = {
+    action: 'edit_nota_full',
+    nota_id: s.nota_id,
+    confirm: 'YES_EDIT_' + s.nota_id,
+    header: s.header,
+    payment: s.payment,
+    items: s.items.map(it => ({
+      type: it.type,
+      label: it.label,
+      produk: it.label, // mirror for Sales_RB/GB schema
+      grade: it.type==='sales-gb' ? it.label : '',
+      qty: parseFloat(it.qty) || 0,
+      packs: parseFloat(it.qty) || 0,
+      harga_per_kg: it.type==='sales-gb' ? (parseFloat(it.harga)||0) : 0,
+      harga_per_pack: it.type!=='sales-gb' ? (parseFloat(it.harga)||0) : 0,
+      total_sales: (parseFloat(it.qty)||0) * (parseFloat(it.harga)||0),
+      catatan: it.catatan || ''
+    }))
+  };
+
+  if (!confirm('Simpan perubahan untuk ' + s.nota_id + '?\n\n• Items akan REPLACE existing (delete + re-insert)\n• Total + Sisa akan di-recompute otomatis\n• Operation atomic (all or nothing)')) return;
+
+  try {
+    const r = await fetch(API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify(payload)
+    });
     const j = JSON.parse(await r.text());
-    if (j.ok) { alert('✓ Nota ' + notaId + ' updated · Fields: ' + (j.updated || []).join(', ')); renderNotaTab(); }
-    else alert('Gagal: ' + (j.error || 'unknown'));
+    if (j.ok) {
+      alert('✓ Nota ' + s.nota_id + ' updated!\n\n• Items: ' + j.items_count + '\n• Total: Rp ' + Math.round(j.total).toLocaleString('id-ID') + '\n• Status: ' + j.status + '\n• Sisa: Rp ' + Math.round(j.sisa).toLocaleString('id-ID'));
+      __closeEditModal();
+      // Force refresh nota list from API
+      if (typeof fetchNotaList === 'function') await fetchNotaList();
+      renderNotaTab();
+    } else {
+      alert('Gagal: ' + (j.error || 'unknown'));
+    }
   } catch(e) { alert('Error: ' + e.message); }
 }
 
