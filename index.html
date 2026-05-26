@@ -1677,9 +1677,9 @@ async function refreshFromAPI() {
       refreshBtn.innerHTML = '🔄 Refreshed ✓';
       setTimeout(() => { refreshBtn.innerHTML = '🔄 Refresh from API'; }, 2000);
     }
-    // Re-render dashboard
+    // Re-render dashboard — V8.6: soft refresh (preserves active tab + scroll)
     if (typeof renderAll === 'function') renderAll();
-    location.reload(); // simplest — full reload after data update
+    __doSoftRefresh();
   } else {
     if (refreshBtn) {
       refreshBtn.disabled = false;
@@ -1724,6 +1724,56 @@ function __syncToast(msg, kind) {
   setTimeout(() => { t.style.transition = 'opacity 0.3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3500);
 }
 
+// V8.6 — Non-blocking refresh prompt (replaces auto-reload UX)
+function __showRefreshPrompt(message) {
+  let promptEl = document.getElementById('refresh-prompt');
+  if (promptEl) return; // already showing — don't stack
+  promptEl = document.createElement('div');
+  promptEl.id = 'refresh-prompt';
+  promptEl.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;background:#1B2A41;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;font-size:13px;max-width:380px;animation:slideUp 0.3s ease';
+  promptEl.innerHTML =
+    '<span style="font-size:18px">🔔</span>' +
+    '<span style="flex:1">' + message + '<br><span style="font-size:11px;opacity:0.7">Klik Refresh saat siap (entry Adib tidak akan ke-interrupt)</span></span>' +
+    '<button onclick="__doSoftRefresh()" style="background:#5B9279;color:#fff;border:none;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Refresh</button>' +
+    '<button onclick="document.getElementById(\'refresh-prompt\').remove()" title="Tutup notifikasi" style="background:transparent;color:#999;border:none;padding:4px 8px;cursor:pointer;font-size:14px">✕</button>';
+  if (!document.getElementById('slideUp-anim')) {
+    const st = document.createElement('style');
+    st.id = 'slideUp-anim';
+    st.textContent = '@keyframes slideUp { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }';
+    document.head.appendChild(st);
+  }
+  document.body.appendChild(promptEl);
+}
+
+// V8.6 — Soft refresh: save tab + scroll → reload → restore
+function __doSoftRefresh() {
+  try {
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) sessionStorage.setItem('bonsari_restore_tab', activeTab.dataset.pane);
+    sessionStorage.setItem('bonsari_restore_scroll', String(window.scrollY));
+  } catch(e) {}
+  location.reload();
+}
+
+// V8.6 — Restore tab + scroll after reload
+function __restoreTabAndScroll() {
+  try {
+    const savedTab = sessionStorage.getItem('bonsari_restore_tab');
+    const savedScroll = sessionStorage.getItem('bonsari_restore_scroll');
+    if (savedTab) {
+      sessionStorage.removeItem('bonsari_restore_tab');
+      const tab = document.querySelector('.tab[data-pane="' + savedTab + '"]');
+      if (tab && !tab.classList.contains('active')) {
+        tab.click();
+      }
+    }
+    if (savedScroll) {
+      sessionStorage.removeItem('bonsari_restore_scroll');
+      setTimeout(() => window.scrollTo({top: parseInt(savedScroll, 10), behavior: 'auto'}), 200);
+    }
+  } catch(e) {}
+}
+
 async function silentRefreshFromAPI() {
   if (document.hidden) return;
   if (new URLSearchParams(location.search).get('nopolling') === '1') return;
@@ -1746,10 +1796,11 @@ async function silentRefreshFromAPI() {
     }
     if (sig !== __lastDataSignature) {
       const ts = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      console.log('[Bonsari Sync] ✓ Data change detected @ ' + ts, { old: JSON.parse(__lastDataSignature), new: JSON.parse(sig) });
+      console.log('[Bonsari Sync] ✓ Data change detected @ ' + ts + ' (silent — user manual refresh to apply)');
       __lastDataSignature = sig;
-      __syncToast('✓ Data baru terdeteksi · ' + ts + ' · auto-refresh...', 'ok');
-      setTimeout(() => location.reload(), 2500);
+      // V8.6b — ZERO interruption. NO toast, NO reload, NO prompt.
+      // Indicator dot is the only sign — Adib klik 🔄 kalau mau refresh.
+      // Indicator already updated above (status='ok' + lastSyncTime) — that's the only signal.
     }
   } catch (e) {
     if (typeof window !== 'undefined') { window.__syncStatus = 'err'; if (typeof __updateSyncIndicator==='function') __updateSyncIndicator(); }
@@ -1888,8 +1939,8 @@ async function __manualSyncTrigger() {
       __lastDataSignature = __dataSignature(fresh);
       __syncToast('✓ Data fresh · manual refresh', 'ok');
       __updateSyncIndicator();
-      // Soft re-render via reload after brief delay (lets toast show)
-      setTimeout(() => location.reload(), 1200);
+      // V8.6 — Soft reload preserves active tab + scroll position
+      setTimeout(__doSoftRefresh, 1200);
     } else {
       window.__syncStatus = 'err';
       __updateSyncIndicator();
@@ -1917,7 +1968,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     header.appendChild(widget);
     document.getElementById('sync-refresh').onclick = __manualSyncTrigger;
   }
-  // Background fetch on initial load
+  // Background fetch on initial load — V8.6b: silent merge + ONE-TIME repaint if empty (no toast)
   setTimeout(async () => {
     const fresh = await fetchFreshData();
     if (fresh) {
@@ -1925,6 +1976,19 @@ window.addEventListener('DOMContentLoaded', async () => {
       window.__syncStatus = 'ok';
       __updateSyncIndicator();
       console.log('✓ Background fetch ok at', new Date().toLocaleTimeString());
+      const wasEmpty = !D.gb_movements || D.gb_movements.length === 0;
+      try { mergeApiData(fresh); } catch(e) { console.warn('Initial merge failed:', e); }
+      try { __lastDataSignature = __dataSignature(fresh); } catch(e) {}
+      // ONE-TIME initial repaint: kalau cache benar2 kosong (first load fresh browser),
+      // soft refresh sekali biar HERO tampil. Skip kalau user sudah scroll/typing.
+      if (wasEmpty && (fresh.data?.gb_movements || []).length > 0
+          && !sessionStorage.getItem('__v86b_initial_done')
+          && window.scrollY < 50
+          && !document.activeElement?.matches('input,textarea,select')) {
+        sessionStorage.setItem('__v86b_initial_done', '1');
+        console.log('[V8.6b] First-load empty render detected — silent repaint');
+        __doSoftRefresh();
+      }
     }
   }, 2000);
   // V8.3: Start silent auto-poll (5s after initial render to avoid race)
@@ -1974,11 +2038,28 @@ document.querySelectorAll('.tab').forEach(b=>{
     document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
     document.getElementById('pane-'+b.dataset.pane).classList.add('active');
+    // V8.6 — Persist active tab so reload doesn't kick user to Overview
+    try { localStorage.setItem('bonsari_last_tab', b.dataset.pane); } catch(e) {}
     // Close mobile menu after click
     if(window.innerWidth <= 840) document.querySelector('.tabs').classList.remove('open');
     // Scroll to top of main content
     window.scrollTo({top: document.querySelector('.main-content').offsetTop - 20, behavior: 'smooth'});
   };
+});
+
+// V8.6 — Restore last active tab on page load (priority: sessionStorage restore-tab > localStorage last-tab)
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    try {
+      __restoreTabAndScroll(); // first try sessionStorage (just-reloaded scenario)
+      // If sessionStorage didn't set, try localStorage last-tab
+      const lastTab = localStorage.getItem('bonsari_last_tab');
+      if (lastTab && lastTab !== 'overview') {
+        const tab = document.querySelector('.tab[data-pane="' + lastTab + '"]');
+        if (tab && !tab.classList.contains('active')) tab.click();
+      }
+    } catch(e) {}
+  }, 300);
 });
 
 // Chart defaults
@@ -2780,7 +2861,7 @@ window.bayarWorkerAll = async function(pekerja, totalAmount) {
       body: JSON.stringify({ action: 'bulk_pay_worker', pekerja: pekerja })
     });
     alert('✅ Pembayaran ' + pekerja + ' (' + fmt(totalAmount) + ') sudah di-record!\n\nDashboard akan refresh otomatis dalam 10 detik...');
-    setTimeout(() => location.reload(), 10000);
+    setTimeout(__doSoftRefresh, 10000);
   } catch (e) {
     alert('⚠️ Error: ' + e.message);
   }
@@ -3003,7 +3084,7 @@ window.saveBatchChanges = async function(pekerja) {
     });
     alert('✅ ' + updates.length + ' batch updated.' + (newlyPaid.length > 0 ? '\n💰 Pengeluaran Sortir auto-created (' + fmt(totalNewPay) + ').' : '') + '\n\nDashboard akan refresh otomatis...');
     window.__pendingBatchChanges = {};
-    setTimeout(() => location.reload(), 8000);
+    setTimeout(__doSoftRefresh, 8000);
   } catch (e) {
     alert('⚠️ Error: ' + e.message);
   }
