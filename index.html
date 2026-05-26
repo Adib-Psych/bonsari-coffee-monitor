@@ -199,6 +199,7 @@ footer a{color:var(--steel);text-decoration:none}
       <button class="tab" data-pane="hpp"><span class="tab-icon">💰</span><span class="tab-label">HPP Reference</span></button>
       <button class="tab" data-pane="logbook"><span class="tab-icon">📋</span><span class="tab-label">LogBook GB</span></button>
       <button class="tab" data-pane="sort"><span class="tab-icon">🌾</span><span class="tab-label">Sortasi</span></button>
+      <button class="tab" data-pane="nota"><span class="tab-icon">🧾</span><span class="tab-label">Nota</span></button>
     </div>
   </aside>
   
@@ -1045,6 +1046,75 @@ footer a{color:var(--steel);text-decoration:none}
           <th>No</th><th>Pekerja</th><th>Tgl Ambil</th><th>Bakalan</th><th class="num">Input</th>
           <th class="num">GBP</th><th class="num">GBC</th><th class="num">GBL</th><th class="num">GBS</th>
           <th class="num">Setor</th><th class="num">Susut</th><th class="num">Yield%</th><th class="num">Ongkos</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- NOTA PANE (V8.4 — 26 Mei 2026) -->
+<div class="tab-pane" id="pane-nota">
+  <div class="section">
+    <h2>🧾 Daftar Nota / Invoice <span class="badge" id="nota-count">— nota</span></h2>
+    <div class="note">List semua nota yang sudah issued. Klik <strong>View</strong> untuk buka nota printable, <strong>Edit</strong> untuk ubah, atau <strong>Mark Paid</strong> untuk record pelunasan. Sumber data: sheet <code>Nota</code> (live, auto-sync setiap 30 detik).</div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:18px">
+      <div class="kpi" style="background:#FFF8E8;border:2px solid #E8975A">
+        <div class="label" style="color:#7A4A1F;font-weight:700">🧾 Total Nota</div>
+        <div class="value" id="nota-kpi-total" style="color:#E8975A;font-size:22px">—</div>
+        <div class="sub" id="nota-kpi-total-sub">issued</div>
+      </div>
+      <div class="kpi" style="background:#DAEBE0;border:2px solid #5B9279">
+        <div class="label" style="color:#2D5640;font-weight:700">✅ Lunas</div>
+        <div class="value" id="nota-kpi-paid" style="color:#2D5640;font-size:22px">—</div>
+        <div class="sub" id="nota-kpi-paid-sub">— nota</div>
+      </div>
+      <div class="kpi" style="background:#FCE5D2;border:2px solid #E89F4D">
+        <div class="label" style="color:#7A4A1F;font-weight:700">◐ DP/Sebagian</div>
+        <div class="value" id="nota-kpi-partial" style="color:#E89F4D;font-size:22px">—</div>
+        <div class="sub" id="nota-kpi-partial-sub">— nota</div>
+      </div>
+      <div class="kpi" style="background:#FCEBEB;border:2px solid #B85C5C">
+        <div class="label" style="color:#7A2A2A;font-weight:700">⚠️ Belum Bayar</div>
+        <div class="value" id="nota-kpi-unpaid" style="color:#B85C5C;font-size:22px">—</div>
+        <div class="sub" id="nota-kpi-unpaid-sub">— nota</div>
+      </div>
+      <div class="kpi" style="background:#E0EBF5;border:2px solid #3A6EA5">
+        <div class="label" style="color:#1B2A41;font-weight:700">💰 Total Piutang</div>
+        <div class="value" id="nota-kpi-piutang" style="color:#3A6EA5;font-size:18px">—</div>
+        <div class="sub" id="nota-kpi-piutang-sub">Sisa belum dibayar</div>
+      </div>
+    </div>
+
+    <!-- Filter Row -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+      <label style="font-size:12px;font-weight:600;color:var(--plum)">Filter Status:</label>
+      <select id="nota-filter-status" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <option value="">Semua</option>
+        <option value="PAID">✅ Lunas</option>
+        <option value="PARTIAL">◐ DP/Sebagian</option>
+        <option value="UNPAID">⚠️ Belum Bayar</option>
+      </select>
+      <input type="text" id="nota-filter-search" placeholder="🔍 Cari ID / Customer..." style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;min-width:200px;flex:1;max-width:300px" />
+      <button onclick="renderNotaTab()" style="padding:6px 14px;background:var(--steel);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">↻ Refresh</button>
+    </div>
+
+    <!-- Nota Table -->
+    <div class="table-wrap">
+      <table id="tbl-nota">
+        <thead><tr>
+          <th>ID</th>
+          <th>Tanggal</th>
+          <th>Customer</th>
+          <th>Type</th>
+          <th class="num">Items</th>
+          <th class="num">Total</th>
+          <th class="num">DP</th>
+          <th class="num">Sisa</th>
+          <th>Status</th>
+          <th>Aksi</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -2147,6 +2217,172 @@ document.getElementById('sort-yield-cards').innerHTML = `
 `;
 
 // === Worker Payment Cards Renderer ===
+// ═══════════════════════════════════════════════════════════════
+// NOTA TAB RENDER ENGINE (V8.4, 26 Mei 2026)
+// Reads from D.nota (populated by mergeApiData). Filter + search + drill-down.
+// ═══════════════════════════════════════════════════════════════
+async function fetchNotaList() {
+  // Re-fetch fresh data to get latest nota state
+  try {
+    const res = await fetch(API_URL + '?data=all', {cache:'no-store'});
+    if (!res.ok) return D.nota || [];
+    const j = await res.json();
+    if (j.ok && j.data && Array.isArray(j.data.nota)) {
+      D.nota = j.data.nota;
+      return D.nota;
+    }
+  } catch(e) { console.warn('[Nota] fetch failed:', e.message); }
+  return D.nota || [];
+}
+
+async function renderNotaTab() {
+  const notas = await fetchNotaList();
+  const fStatus = document.getElementById('nota-filter-status')?.value || '';
+  const fSearch = (document.getElementById('nota-filter-search')?.value || '').toLowerCase().trim();
+
+  // Filter
+  let filtered = notas.slice();
+  if (fStatus) filtered = filtered.filter(n => (n.status_payment || '').toUpperCase() === fStatus);
+  if (fSearch) filtered = filtered.filter(n =>
+    (n.id || '').toLowerCase().includes(fSearch) ||
+    (n.customer || '').toLowerCase().includes(fSearch)
+  );
+
+  // Sort newest first by ID (BC-2026-NNNN — string compare works)
+  filtered.sort((a,b) => (b.id || '').localeCompare(a.id || ''));
+
+  // KPI calculations (from ALL notas, not filtered)
+  const total = notas.length;
+  const paid = notas.filter(n => (n.status_payment||'').toUpperCase() === 'PAID').length;
+  const partial = notas.filter(n => (n.status_payment||'').toUpperCase() === 'PARTIAL').length;
+  const unpaid = notas.filter(n => (n.status_payment||'').toUpperCase() === 'UNPAID').length;
+  const piutang = notas.reduce((s, n) => s + (+n.sisa || 0), 0);
+
+  // Update KPIs
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('nota-kpi-total', total);
+  setText('nota-kpi-total-sub', total === 1 ? 'nota issued' : total + ' nota issued');
+  setText('nota-kpi-paid', paid);
+  setText('nota-kpi-paid-sub', paid + ' / ' + total + ' nota');
+  setText('nota-kpi-partial', partial);
+  setText('nota-kpi-partial-sub', partial + ' / ' + total + ' nota');
+  setText('nota-kpi-unpaid', unpaid);
+  setText('nota-kpi-unpaid-sub', unpaid + ' / ' + total + ' nota');
+  setText('nota-kpi-piutang', fmt(piutang));
+  setText('nota-count', total + ' nota · ' + filtered.length + ' tampil');
+
+  // Render table
+  const tbody = document.querySelector('#tbl-nota tbody');
+  if (!tbody) return;
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--muted);font-style:italic">Belum ada nota — buat nota baru via Entry Dashboard tab "🧾 Buat Nota / Invoice"</td></tr>';
+    return;
+  }
+  const notaBaseUrl = location.origin + location.pathname.replace(/[^/]+$/,'') + 'nota.html?nota=';
+  tbody.innerHTML = filtered.map(n => {
+    const status = (n.status_payment || 'UNPAID').toUpperCase();
+    const statusBadge = status === 'PAID'
+      ? '<span style="background:#DAEBE0;color:#2D5640;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700">✅ LUNAS</span>'
+      : status === 'PARTIAL'
+      ? '<span style="background:#FCE5D2;color:#7A4A1F;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700">◐ DP</span>'
+      : '<span style="background:#FCEBEB;color:#7A2A2A;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700">⚠️ BELUM</span>';
+    const notaUrl = notaBaseUrl + encodeURIComponent(n.id || '');
+    return '<tr>' +
+      '<td><strong style="font-family:SF Mono,monospace;font-size:12px;color:var(--plum)">' + (n.id || '—') + '</strong></td>' +
+      '<td>' + (n.tanggal || '—') + '</td>' +
+      '<td>' + (n.customer || '—') + '</td>' +
+      '<td><span style="font-size:11px;color:var(--muted)">' + (n.customer_type || '—') + '</span></td>' +
+      '<td class="num">' + (n.item_count || 0) + '</td>' +
+      '<td class="num"><strong>' + fmt(n.total) + '</strong></td>' +
+      '<td class="num" style="color:#5B9279">' + fmt(n.dp_paid) + '</td>' +
+      '<td class="num" style="color:' + (n.sisa > 0 ? '#B85C5C' : '#5B9279') + ';font-weight:600">' + fmt(n.sisa) + '</td>' +
+      '<td>' + statusBadge + '</td>' +
+      '<td><div style="display:flex;gap:4px;flex-wrap:nowrap">' +
+        '<a href="' + notaUrl + '" target="_blank" style="padding:4px 8px;background:var(--plum);color:white;border-radius:4px;font-size:11px;text-decoration:none;font-weight:600">View</a>' +
+        '<button onclick="editNota(\'' + n.id + '\')" style="padding:4px 8px;background:#E89F4D;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600">Edit</button>' +
+        (status !== 'PAID' ? '<button onclick="markNotaPaid(\'' + n.id + '\', ' + (+n.total || 0) + ')" style="padding:4px 8px;background:#5B9279;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600">✓ Lunas</button>' : '') +
+        '<button onclick="deleteNota(\'' + n.id + '\')" title="Hapus nota + linked items" style="padding:4px 8px;background:#B85C5C;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-weight:600">✕</button>' +
+      '</div></td>' +
+    '</tr>';
+  }).join('');
+}
+
+// V8.4 — Full edit with prompts (simple, no modal needed)
+async function editNota(notaId) {
+  const nota = (D.nota || []).find(n => n.id === notaId);
+  if (!nota) { alert('Nota ' + notaId + ' tidak ditemukan'); return; }
+  const newCustomer = prompt('Edit Customer untuk ' + notaId + ':', nota.customer || '');
+  if (newCustomer === null) return;
+  const newCatatan = prompt('Edit Catatan (boleh kosong):', nota.catatan || '');
+  if (newCatatan === null) return;
+  const newTanggal = prompt('Edit Tanggal (YYYY-MM-DD):', nota.tanggal || '');
+  if (newTanggal === null) return;
+  const payload = { action: 'edit_nota_header', nota_id: notaId };
+  if (newCustomer.trim() && newCustomer !== nota.customer) payload.customer = newCustomer.trim();
+  if (newCatatan !== nota.catatan) payload.catatan = newCatatan;
+  if (newTanggal && newTanggal !== nota.tanggal && /^\d{4}-\d{2}-\d{2}$/.test(newTanggal)) payload.tanggal = newTanggal;
+  if (Object.keys(payload).length <= 2) { alert('Tidak ada perubahan'); return; }
+  try {
+    const r = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
+    const j = JSON.parse(await r.text());
+    if (j.ok) { alert('✓ Nota ' + notaId + ' updated · Fields: ' + (j.updated || []).join(', ')); renderNotaTab(); }
+    else alert('Gagal: ' + (j.error || 'unknown'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteNota(notaId) {
+  if (!confirm('🚨 HAPUS nota ' + notaId + ' PERMANENT?\n\nSemua items linked (Sales_GB, Sales_RB, Nota_Misc) juga dihapus.\n\nTidak bisa di-undo (recovery via Google Sheet Version History).')) return;
+  const userConfirm = prompt('Type "' + notaId + '" untuk konfirmasi:');
+  if (userConfirm !== notaId) { alert('Cancelled — konfirmasi salah'); return; }
+  try {
+    const r = await fetch(API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({ action:'delete_nota', nota_id: notaId, confirm: 'YES_DELETE_' + notaId })
+    });
+    const j = JSON.parse(await r.text());
+    if (j.ok) { alert('✓ Deleted ' + notaId + '\n\n' + (j.result || '')); renderNotaTab(); }
+    else alert('Gagal: ' + (j.error || 'unknown'));
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function markNotaPaid(notaId, total) {
+  if (!confirm('Mark nota ' + notaId + ' sebagai LUNAS?\nTotal: ' + fmt(total) + '\n\nDP akan auto-update ke ' + fmt(total) + ' + status PAID.')) return;
+  try {
+    const r = await fetch(API_URL, {
+      method:'POST', headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify({
+        action: 'update_nota_status',
+        nota_id: notaId,
+        status_payment: 'PAID',
+        dp_paid: total,
+        paid_date: new Date().toISOString().slice(0,10)
+      })
+    });
+    const t = await r.text();
+    try {
+      const j = JSON.parse(t);
+      if (j.ok) {
+        alert('✅ Nota ' + notaId + ' marked LUNAS!\n\nDashboard akan refresh.');
+        renderNotaTab();
+      } else { alert('Gagal: ' + (j.error || 'unknown')); }
+    } catch(e) { alert('Response: ' + t.slice(0,200)); }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// Hook filter changes
+document.addEventListener('DOMContentLoaded', () => {
+  const fs = document.getElementById('nota-filter-status');
+  const ss = document.getElementById('nota-filter-search');
+  if (fs) fs.addEventListener('change', renderNotaTab);
+  if (ss) ss.addEventListener('input', () => clearTimeout(window.__notaSearchT) || (window.__notaSearchT = setTimeout(renderNotaTab, 300)));
+});
+
+// Hook tab switch — render when Nota tab opened
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-pane="nota"]');
+  if (t) setTimeout(renderNotaTab, 100);
+});
+
 (function renderWorkerPayment(){
   const ws = D.worker_stats || {};
   const workers = Object.values(ws);

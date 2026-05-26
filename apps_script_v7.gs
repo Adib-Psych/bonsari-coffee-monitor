@@ -201,6 +201,12 @@ function doPost(e) {
       case 'update_nota_status':
         result = handleUpdateNotaStatus_(ss, body);
         break;
+      case 'edit_nota_header':
+        result = handleEditNotaHeader_(ss, body);
+        break;
+      case 'delete_nota':
+        result = handleDeleteNota_(ss, body);
+        break;
       default:
         result = { ok: false, error: 'Unknown action: ' + action };
     }
@@ -1245,4 +1251,81 @@ function formatAndSortAll_(ss) {
            .sort({column: dateCol+1, ascending: false});
     }
   });
+}
+
+/**
+ * V8.4 — Edit nota header (customer, tanggal, catatan).
+ * Body: { nota_id, customer?, tanggal?, catatan?, customer_type? }
+ * Does NOT touch items or totals. For full edit, use delete + re-submit.
+ */
+function handleEditNotaHeader_(ss, body) {
+  const notaId = body.nota_id;
+  if (!notaId) return { ok: false, error: 'nota_id wajib' };
+  const sheet = ss.getSheetByName(SHEETS.NOTA);
+  if (!sheet) return { ok: false, error: 'Nota sheet not found' };
+  const headers = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
+  const lr = sheet.getLastRow();
+  if (lr < 2) return { ok: false, error: 'Nota sheet empty' };
+  const ids = sheet.getRange(2, 1, lr-1, 1).getValues().map(r => r[0]);
+  const idx = ids.indexOf(notaId);
+  if (idx < 0) return { ok: false, error: 'nota_id ' + notaId + ' not found' };
+  const sheetRow = idx + 2;
+  const updates = [];
+  const fields = ['customer', 'customer_type', 'tanggal', 'catatan'];
+  fields.forEach(field => {
+    if (body[field] !== undefined && body[field] !== null) {
+      const colIdx = headers.indexOf(field);
+      if (colIdx >= 0) {
+        sheet.getRange(sheetRow, colIdx + 1).setValue(body[field]);
+        updates.push(field + '=' + body[field]);
+      }
+    }
+  });
+  return { ok: true, nota_id: notaId, updated: updates };
+}
+
+/**
+ * V8.4 — Delete nota + all linked rows (Sales_GB, Sales_RB, Nota_Misc).
+ * Body: { nota_id, confirm: 'YES_DELETE_' + nota_id }
+ * Safety: requires confirm token to prevent accidental delete.
+ */
+function handleDeleteNota_(ss, body) {
+  const notaId = body.nota_id;
+  if (!notaId) return { ok: false, error: 'nota_id wajib' };
+  const expectedConfirm = 'YES_DELETE_' + notaId;
+  if (body.confirm !== expectedConfirm) {
+    return { ok: false, error: 'confirm token salah. Expected: ' + expectedConfirm };
+  }
+  const report = [];
+  // 1. Delete Nota header row
+  const notaSheet = ss.getSheetByName(SHEETS.NOTA);
+  if (notaSheet) {
+    const lr = notaSheet.getLastRow();
+    if (lr >= 2) {
+      const ids = notaSheet.getRange(2, 1, lr-1, 1).getValues().map(r => r[0]);
+      const idx = ids.indexOf(notaId);
+      if (idx >= 0) {
+        notaSheet.deleteRow(idx + 2);
+        report.push('Nota header deleted');
+      } else {
+        report.push('Nota header not found');
+      }
+    }
+  }
+  // 2. Delete linked rows in Sales_GB, Sales_RB, Nota_Misc
+  ['SALES_GB', 'SALES_RB', 'NOTA_MISC'].forEach(sn => {
+    const sh = ss.getSheetByName(SHEETS[sn]);
+    if (!sh) return;
+    const sHeaders = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
+    const notaCol = sHeaders.indexOf('nota_id');
+    if (notaCol < 0) return;
+    const lr = sh.getLastRow();
+    if (lr < 2) return;
+    const data = sh.getRange(2, notaCol+1, lr-1, 1).getValues();
+    const rowsToDelete = [];
+    data.forEach((row, i) => { if (row[0] === notaId) rowsToDelete.push(i + 2); });
+    rowsToDelete.reverse().forEach(r => sh.deleteRow(r));
+    if (rowsToDelete.length > 0) report.push(sn + ': deleted ' + rowsToDelete.length);
+  });
+  return { ok: true, nota_id: notaId, result: report.join(' | ') };
 }
