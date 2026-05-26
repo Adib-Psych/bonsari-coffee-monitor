@@ -1729,7 +1729,16 @@ async function silentRefreshFromAPI() {
   if (new URLSearchParams(location.search).get('nopolling') === '1') return;
   try {
     const fresh = await fetchFreshData();
-    if (!fresh) return;
+    if (!fresh) {
+      if (typeof window !== 'undefined') { window.__syncStatus = 'err'; if (typeof __updateSyncIndicator==='function') __updateSyncIndicator(); }
+      return;
+    }
+    // Update sync indicator — successful poll
+    if (typeof window !== 'undefined') {
+      window.__lastSyncTime = new Date();
+      window.__syncStatus = 'ok';
+      if (typeof __updateSyncIndicator === 'function') __updateSyncIndicator();
+    }
     const sig = __dataSignature(fresh);
     if (__lastDataSignature === null) {
       __lastDataSignature = sig;
@@ -1743,6 +1752,7 @@ async function silentRefreshFromAPI() {
       setTimeout(() => location.reload(), 2500);
     }
   } catch (e) {
+    if (typeof window !== 'undefined') { window.__syncStatus = 'err'; if (typeof __updateSyncIndicator==='function') __updateSyncIndicator(); }
     console.warn('[Bonsari Sync] silent refresh failed:', e.message);
   }
 }
@@ -1840,21 +1850,82 @@ if (window.__bonsariCachedData) {
   };
 })();
 
-// Add Refresh button to header (after DOM ready)
+// V8.5 — Auto-sync status indicator (replaces "Refresh from API" button)
+window.__lastSyncTime = null;
+window.__syncStatus = 'idle'; // 'ok' | 'syncing' | 'err' | 'idle'
+
+function __updateSyncIndicator() {
+  const dot = document.getElementById('sync-dot');
+  const timeEl = document.getElementById('sync-time');
+  if (!dot || !timeEl) return;
+  const s = window.__syncStatus;
+  if (s === 'syncing') { dot.textContent = '🟡'; dot.title = 'Refreshing...'; }
+  else if (s === 'err') { dot.textContent = '🔴'; dot.title = 'Sync error — coba refresh manual'; }
+  else { dot.textContent = '🟢'; dot.title = 'Auto-sync aktif setiap 30 detik'; }
+  if (window.__lastSyncTime) {
+    const t = window.__lastSyncTime;
+    const hh = String(t.getHours()).padStart(2,'0');
+    const mm = String(t.getMinutes()).padStart(2,'0');
+    const ss = String(t.getSeconds()).padStart(2,'0');
+    timeEl.textContent = hh + ':' + mm + ':' + ss;
+  } else {
+    timeEl.textContent = '--:--:--';
+  }
+}
+
+async function __manualSyncTrigger() {
+  const btn = document.getElementById('sync-refresh');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; }
+  window.__syncStatus = 'syncing';
+  __updateSyncIndicator();
+  try {
+    const fresh = await fetchFreshData();
+    if (fresh) {
+      window.__lastSyncTime = new Date();
+      window.__syncStatus = 'ok';
+      mergeApiData(fresh);
+      // Update signature so polling doesn't re-trigger reload
+      __lastDataSignature = __dataSignature(fresh);
+      __syncToast('✓ Data fresh · manual refresh', 'ok');
+      __updateSyncIndicator();
+      // Soft re-render via reload after brief delay (lets toast show)
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      window.__syncStatus = 'err';
+      __updateSyncIndicator();
+    }
+  } catch(e) {
+    window.__syncStatus = 'err';
+    __updateSyncIndicator();
+    console.warn('[Bonsari Sync] manual refresh failed:', e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+  }
+}
+
+// Add Sync Indicator to header (after DOM ready)
 window.addEventListener('DOMContentLoaded', async () => {
   const header = document.querySelector('header .wrap');
-  if (header && !document.getElementById('refresh-btn')) {
-    const btn = document.createElement('button');
-    btn.id = 'refresh-btn';
-    btn.style.cssText = 'background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.4);padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:auto';
-    btn.innerHTML = '🔄 Refresh from API';
-    btn.onclick = refreshFromAPI;
-    header.appendChild(btn);
+  if (header && !document.getElementById('sync-indicator')) {
+    const widget = document.createElement('div');
+    widget.id = 'sync-indicator';
+    widget.style.cssText = 'display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);padding:5px 10px 5px 12px;border-radius:18px;font-size:11px;color:#fff;margin-left:auto;line-height:1';
+    widget.innerHTML =
+      '<span id="sync-dot" style="font-size:9px;line-height:1" title="Auto-sync aktif">🟢</span>' +
+      '<span style="opacity:0.9">Auto-sync · last: <span id="sync-time" style="font-variant-numeric:tabular-nums;font-weight:600">--:--:--</span></span>' +
+      '<button id="sync-refresh" title="Refresh manual sekarang" style="background:rgba(255,255,255,0.18);border:none;color:#fff;padding:3px 7px;border-radius:10px;cursor:pointer;font-size:11px;line-height:1">🔄</button>';
+    header.appendChild(widget);
+    document.getElementById('sync-refresh').onclick = __manualSyncTrigger;
   }
   // Background fetch on initial load
   setTimeout(async () => {
     const fresh = await fetchFreshData();
-    if (fresh) console.log('✓ Background fetch ok at', new Date().toLocaleTimeString());
+    if (fresh) {
+      window.__lastSyncTime = new Date();
+      window.__syncStatus = 'ok';
+      __updateSyncIndicator();
+      console.log('✓ Background fetch ok at', new Date().toLocaleTimeString());
+    }
   }, 2000);
   // V8.3: Start silent auto-poll (5s after initial render to avoid race)
   setTimeout(__startAutoPolling, 5000);
