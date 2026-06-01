@@ -897,7 +897,7 @@ footer a{color:var(--steel);text-decoration:none}
   
   <!-- Section C — HERO: Stock Saat Ini per Grade (moved to top) -->
   <div class="section" id="lb-hero-stock">
-    <h2>📦 Stock Available Saat Ini per Grade <span class="badge" id="lb-hero-asof">Per 5 Mei 2026 · 329 KG · Verified</span></h2>
+    <h2>📦 Stock Available Saat Ini per Grade <span class="badge" id="lb-hero-asof">Live · memuat…</span></h2>
     <div class="note" style="background:#F0F7E8;border-left:3px solid #5B9279"><strong>HERO:</strong> Snapshot stock fisik per grade — bertambah/berkurang sesuai aliran sortasi. <strong>GBO</strong> berkurang setiap masuk sortasi, <strong>GBP/GBC/GBL/GBS</strong> bertambah dari output sortasi. Lihat <a href="#" onclick="document.querySelector('[data-pane=\\"sort\\"]').click();return false;" style="color:#3A6EA5;font-weight:600">tab Sortasi</a> untuk detail aliran.</div>
     
     <!-- Top KPI summary -->
@@ -1362,6 +1362,11 @@ function mergeApiData(apiResponse) {
   }
   // Recompute KPIs from fresh entries so header + cards update
   __recomputeKPIs();
+  // V8.7 — Re-render LogBook GB (HERO Stock per Grade, KPI cards, tables, charts)
+  // after fresh data merged. Eliminates Issue A render race (cards stuck at "—" or 0).
+  if (typeof renderLogBookFull === 'function') {
+    try { renderLogBookFull(); } catch(e) { console.warn('[V8.7] renderLogBookFull after merge failed:', e); }
+  }
 }
 
 function __recomputeKPIs() {
@@ -1937,10 +1942,10 @@ async function __manualSyncTrigger() {
       mergeApiData(fresh);
       // Update signature so polling doesn't re-trigger reload
       __lastDataSignature = __dataSignature(fresh);
-      __syncToast('✓ Data fresh · manual refresh', 'ok');
+      __syncToast('✓ Data fresh · diperbarui', 'ok');
       __updateSyncIndicator();
-      // V8.6 — Soft reload preserves active tab + scroll position
-      setTimeout(__doSoftRefresh, 1200);
+      // V8.7 — In-place re-render (no page reload). mergeApiData already triggered renderLogBookFull internally.
+      // Keep soft refresh path available for explicit reload scenarios, but default to in-place.
     } else {
       window.__syncStatus = 'err';
       __updateSyncIndicator();
@@ -1968,27 +1973,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     header.appendChild(widget);
     document.getElementById('sync-refresh').onclick = __manualSyncTrigger;
   }
-  // Background fetch on initial load — V8.6b: silent merge + ONE-TIME repaint if empty (no toast)
+  // Background fetch on initial load — V8.7: in-place merge + auto re-render via mergeApiData
+  // (no soft reload, no guards needed — renderLogBookFull idempotent + Chart.js destroyed cleanly)
   setTimeout(async () => {
     const fresh = await fetchFreshData();
     if (fresh) {
       window.__lastSyncTime = new Date();
       window.__syncStatus = 'ok';
       __updateSyncIndicator();
-      console.log('✓ Background fetch ok at', new Date().toLocaleTimeString());
-      const wasEmpty = !D.gb_movements || D.gb_movements.length === 0;
-      try { mergeApiData(fresh); } catch(e) { console.warn('Initial merge failed:', e); }
+      console.log('[V8.7] ✓ Background fetch ok at', new Date().toLocaleTimeString());
+      try { mergeApiData(fresh); } catch(e) { console.warn('[V8.7] Initial merge failed:', e); }
       try { __lastDataSignature = __dataSignature(fresh); } catch(e) {}
-      // ONE-TIME initial repaint: kalau cache benar2 kosong (first load fresh browser),
-      // soft refresh sekali biar HERO tampil. Skip kalau user sudah scroll/typing.
-      if (wasEmpty && (fresh.data?.gb_movements || []).length > 0
-          && !sessionStorage.getItem('__v86b_initial_done')
-          && window.scrollY < 50
-          && !document.activeElement?.matches('input,textarea,select')) {
-        sessionStorage.setItem('__v86b_initial_done', '1');
-        console.log('[V8.6b] First-load empty render detected — silent repaint');
-        __doSoftRefresh();
-      }
+      // mergeApiData internally calls renderLogBookFull() — HERO Stock cards update in place.
     }
   }, 2000);
   // V8.3: Start silent auto-poll (5s after initial render to avoid race)
@@ -4060,9 +4056,15 @@ updateOwnerLoanUI();
 
 
 
-// ============= LOGBOOK GB =============
-const LB = D.logbook;
-if(LB){
+// ============= LOGBOOK GB (V8.7 — wrapped in function for re-render after data fetch) =============
+function renderLogBookFull(){
+  const LB = D.logbook;
+  if(!LB) return;
+  // V8.7 — Destroy existing Chart.js instances to prevent canvas reuse error on re-render
+  if (window.__lbCharts) {
+    window.__lbCharts.forEach(c => { try { c.destroy(); } catch(e){} });
+  }
+  window.__lbCharts = [];
   // KPI cards
   document.getElementById('lb-total-purchase').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(LB.aggregates.total_pembelian_rp,0);
   document.getElementById('lb-total-in').textContent = fmtN(LB.aggregates.total_pembelian_kg,0) + ' KG';
@@ -4090,7 +4092,7 @@ if(LB){
   
   // Pie chart: Pembelian by supplier
   const supplierData = Object.entries(LB.aggregates.pembelian_by_supplier);
-  new Chart(document.getElementById('ch-lb-supplier'),{
+  window.__lbCharts.push(new Chart(document.getElementById('ch-lb-supplier'),{
     type:'doughnut',
     data:{labels:supplierData.map(s=>s[0]),datasets:[{
       data:supplierData.map(s=>s[1]),
@@ -4101,11 +4103,11 @@ if(LB){
       plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10}}},
         tooltip:{callbacks:{label:c=>{const t=c.dataset.data.reduce((a,b)=>a+b,0);return c.label+': '+fmtN(c.parsed,0)+' KG ('+(c.parsed/t*100).toFixed(1)+'%)';}}}}
     }
-  });
-  
+  }));
+
   // Outflow breakdown pie
   const outflowData = Object.entries(LB.aggregates.outflow_by_type).sort((a,b)=>b[1]-a[1]);
-  new Chart(document.getElementById('ch-lb-outflow'),{
+  window.__lbCharts.push(new Chart(document.getElementById('ch-lb-outflow'),{
     type:'doughnut',
     data:{labels:outflowData.map(o=>o[0]),datasets:[{
       data:outflowData.map(o=>o[1]),
@@ -4116,8 +4118,8 @@ if(LB){
       plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10}}},
         tooltip:{callbacks:{label:c=>{const t=c.dataset.data.reduce((a,b)=>a+b,0);return c.label+': '+fmtN(c.parsed,2)+' KG ('+(c.parsed/t*100).toFixed(1)+'%)';}}}}
     }
-  });
-  
+  }));
+
   // Section A: Pembelian table
   const pembelianTb = document.querySelector('#tbl-lb-pembelian tbody');
   pembelianTb.innerHTML = LB.pembelian.map(p=>`<tr>
@@ -4274,10 +4276,12 @@ if(LB){
   // Section C: Notes
   const notesContainer = document.getElementById('lb-notes-content');
   if(LB.notes && LB.notes.length){
-    notesContainer.innerHTML = '<ul style="padding-left:20px;line-height:1.8">' + 
+    notesContainer.innerHTML = '<ul style="padding-left:20px;line-height:1.8">' +
       LB.notes.map(n=>`<li>${n}</li>`).join('') + '</ul>';
   }
 }
+// V8.7 — Initial render call (replaces old `if(LB){...}` immediate-execute pattern)
+renderLogBookFull();
 
 </script>
 
