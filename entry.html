@@ -160,6 +160,7 @@
       <div class="nav-item" data-tab="sales-rb"><span class="ni-icon">☕</span><span>Penjualan RB & GC</span></div>
       <div class="nav-item" data-tab="pengeluaran"><span class="ni-icon">💸</span><span>Pengeluaran</span></div>
       <div class="nav-item" data-tab="sortasi"><span class="ni-icon">🌿</span><span>Sortasi Batch</span></div>
+      <div class="nav-item" data-tab="produksi"><span class="ni-icon">🔥</span><span>Produksi RB/GC</span></div>
       <div class="nav-item" data-tab="adjustment"><span class="ni-icon">⚖️</span><span>Stock Adjustment</span></div>
     </div>
     <div class="nav-section">
@@ -457,6 +458,114 @@
     <div class="side-panel">
       <div class="panel-card"><h3>📋 Pending Entries</h3><div class="pending-list" id="pending-sortasi"></div></div>
       <div class="panel-card"><h3>📊 Yield Reference</h3><div style="font-size:11.5px;color:var(--muted);line-height:1.7">Avg yield (66 batch):<br/><strong style="color:var(--info)">GBP: ~63%</strong> · <strong>GBC: ~6%</strong><br/><strong style="color:var(--success)">GBL: ~14%</strong> · <strong>GBS: ~13%</strong><br/><strong style="color:var(--danger)">Susut: ~1%</strong><br/>Standard ongkos: <strong>Rp 3.000/KG</strong> output</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PANE: PRODUKSI RB/GC (V8.9 Phase 2 panen 2026) ============ -->
+<div class="pane" id="pane-produksi">
+  <div style="display:flex;gap:10px;margin-bottom:14px">
+    <button id="prd-mode-ambil-btn" class="prd-mode-btn prd-mode-active" onclick="setProduksiMode('ambil')"
+      style="flex:1;padding:14px;background:#7A4A1F;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s">
+      ↗️ Mode A: Kirim ke Roastery
+    </button>
+    <button id="prd-mode-selesai-btn" class="prd-mode-btn" onclick="setProduksiMode('selesai')"
+      style="flex:1;padding:14px;background:#fff;color:#7A4A1F;border:2px solid #7A4A1F;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s">
+      ↙️ Mode B: Kembali dari Roastery
+    </button>
+  </div>
+  <div class="form-grid">
+    <!-- ============ MODE A: KIRIM KE ROASTERY ============ -->
+    <div class="form-card" id="prd-form-ambil">
+      <h2>↗️ Kirim GB ke Roastery</h2>
+      <div class="form-sub">Saat GB diserahkan ke roastery untuk diroasting. Stok GB sumber akan otomatis berkurang (lokasi: di_roastery:{vendor}).</div>
+      <div class="field-row">
+        <div class="field"><label>📅 Tgl Ambil</label><input type="date" id="prd-tgl-ambil" /></div>
+        <div class="field"><label>🏭 Vendor Roastery</label><input type="text" id="prd-vendor" list="prd-vendors-list" value="Equal Roastery" /></div>
+      </div>
+      <datalist id="prd-vendors-list">
+        <option value="Equal Roastery"></option>
+        <option value="Aftertaste"></option>
+        <option value="Sanubari"></option>
+      </datalist>
+      <div class="field-row">
+        <div class="field"><label>🌾 Source Grade</label>
+          <select id="prd-source-grade" onchange="onProduksiSourceChange()">
+            <option value="">-- Pilih --</option>
+            <option value="GBP">⭐ GBP → RBP (susut ~20%)</option>
+            <option value="GBC">📦 GBC → RBC (susut ~20%)</option>
+            <option value="GBL">🍃 GBL → RBL (susut ~20%)</option>
+            <option value="GBS">📥 GBS → GC (susut ~28%, roast+grind)</option>
+            <option value="SIG">⭐✨ SIG → RBSig (susut ~20%, Signature wakaf)</option>
+          </select>
+        </div>
+        <div class="field"><label>⚖️ Qty Input (KG)</label><input type="number" id="prd-qty-input" step="any" placeholder="e.g. 8.5" inputmode="decimal" oninput="recalcProduksiExpected()" /></div>
+      </div>
+      <div class="margin-display" style="grid-template-columns:repeat(3,1fr)">
+        <div class="item"><div class="lbl">🎯 Target Produk</div><div class="val" id="prd-target-display">—</div></div>
+        <div class="item"><div class="lbl">📊 Expected Output</div><div class="val" id="prd-expected-output">— KG</div></div>
+        <div class="item"><div class="lbl">📉 Expected Susut</div><div class="val" id="prd-expected-susut">—%</div></div>
+      </div>
+      <div class="field"><label>📝 Catatan (opsional)</label><textarea id="prd-catatan-ambil" rows="2" placeholder="Mis. batch khusus order Lycheum, profil medium-dark..."></textarea></div>
+      <div style="background:#FFF3E0;border-left:3px solid #E8975A;padding:10px 12px;font-size:11.5px;color:#7A4A1F;margin-top:10px;border-radius:4px">
+        💡 Setelah submit: <strong>stok source grade berkurang</strong> dari di_tempat, <strong>tracked di lokasi di_roastery:{vendor}</strong>. Batch ID auto-generated (PRD-YYYY-NNNN) untuk tracking saat kembali.
+      </div>
+      <div id="prd-validation-ambil"></div>
+      <div class="btn-row"><button class="btn btn-secondary" onclick="resetForm('produksi')">🔄 Reset</button><button class="btn btn-primary" onclick="submitEntry('produksi-ambil')">✅ Submit Kirim</button></div>
+    </div>
+
+    <!-- ============ MODE B: KEMBALI DARI ROASTERY ============ -->
+    <div class="form-card" id="prd-form-selesai" style="display:none">
+      <h2>↙️ Kembali dari Roastery</h2>
+      <div class="form-sub">Saat RB/GC kembali dari roastery. Pilih batch outstanding, input actual output + biaya roasting. Stok produk auto-bertambah + Pengeluaran auto-record.</div>
+      <div class="field"><label>📋 Pilih Batch Outstanding (in_progress)</label>
+        <select id="prd-batch-id" onchange="onProduksiBatchSelected()">
+          <option value="">-- Loading batches in_progress... --</option>
+        </select>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:4px" id="prd-batch-info">Pilih batch dari list di atas. Auto-fetch dari API.</div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>📅 Tgl Kembali</label><input type="date" id="prd-tgl-kembali" /></div>
+        <div class="field"><label>⚖️ Actual Output (KG)</label><input type="number" id="prd-actual-output" step="any" placeholder="0.00" inputmode="decimal" oninput="recalcProduksiSusut()" /></div>
+      </div>
+      <div class="margin-display" style="grid-template-columns:repeat(3,1fr)">
+        <div class="item"><div class="lbl">📉 Actual Susut</div><div class="val" id="prd-actual-susut">—%</div></div>
+        <div class="item"><div class="lbl">⚠️ Variance</div><div class="val" id="prd-variance">—</div></div>
+        <div class="item"><div class="lbl">📊 vs Expected</div><div class="val" id="prd-vs-expected">—</div></div>
+      </div>
+      <div id="prd-variance-warning" style="display:none;background:#FFF3E0;border-left:3px solid #E8975A;padding:10px 12px;font-size:11.5px;color:#7A4A1F;margin:10px 0;border-radius:4px"></div>
+      <div style="font-weight:700;color:var(--primary);margin:14px 0 8px;font-size:14px">💰 Biaya Roasting</div>
+      <div class="field-row">
+        <div class="field"><label>Biaya per KG GB input (Rp)</label><input type="number" id="prd-biaya-per-kg" step="500" value="12500" oninput="recalcProduksiBiaya()" /></div>
+        <div class="field"><label>Biaya Total (Rp) <span style="font-size:10px;color:var(--muted)">auto</span></label><input type="number" id="prd-biaya-total" step="1000" /></div>
+      </div>
+      <div class="field"><label>📦 Biaya Packaging (Rp, opsional)</label><input type="number" id="prd-biaya-packaging" step="500" value="0" /></div>
+      <div class="field"><label>📝 Catatan <span id="prd-catatan-wajib" style="color:var(--danger);font-weight:700;display:none">(WAJIB karena variance)</span></label><textarea id="prd-catatan-selesai" rows="2" placeholder="Susut variance / kondisi roastery / observasi..."></textarea></div>
+      <div style="background:#F0F7E8;border-left:3px solid #5B9279;padding:10px 12px;font-size:11.5px;color:#2D5640;margin-top:10px;border-radius:4px">
+        💡 Setelah submit: <strong>stok target produk bertambah</strong> di tempat, <strong>Pengeluaran "Roasting" auto-tercatat</strong> dengan vendor sebagai supplier. Stock di_roastery clearing.
+      </div>
+      <div id="prd-validation-selesai"></div>
+      <div class="btn-row"><button class="btn btn-secondary" onclick="resetForm('produksi')">🔄 Reset</button><button class="btn btn-primary" onclick="submitEntry('produksi-selesai')">✅ Submit Kembali</button></div>
+    </div>
+
+    <div class="side-panel">
+      <div class="panel-card"><h3>📋 Pending Entries</h3><div class="pending-list" id="pending-produksi"></div></div>
+      <div class="panel-card" style="background:linear-gradient(135deg,#FFF7ED 0%,#FCE5D2 100%);border:1.5px solid #E8975A">
+        <h3 style="color:#7A4A1F">🔥 Tolerance Susut</h3>
+        <div style="font-size:11.5px;color:#7A4A1F;line-height:1.7">
+          <strong>RB (RBP/RBC/RBL/RBSig):</strong> 20% ±5% (15-25%)<br/>
+          <strong>GC:</strong> 28% ±5% (23-33%, roast+grind)<br/><br/>
+          <em style="font-size:10.5px">Industry benchmark Vienna roast level. Outside → flag warning + catatan WAJIB.</em>
+        </div>
+      </div>
+      <div class="panel-card" style="background:linear-gradient(135deg,#F0F7E8 0%,#DAEBE0 100%);border:1.5px solid #5B9279">
+        <h3 style="color:#2D5640">💰 Biaya Default</h3>
+        <div style="font-size:11.5px;color:#2D5640;line-height:1.7">
+          <strong>Rp 12.500/KG GB input</strong><br/>
+          (historical Equal Roastery)<br/><br/>
+          Editable per batch.
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1157,7 +1266,10 @@ function submitEntry(tab){
     STATE.customer_history[r.data.customer][r.data.produk] = r.data.harga_per_kg||r.data.harga_per_pack;
   }
   // V7: Normalize sortasi-keluar/sortasi-kembali → 'sortasi' bucket
-  const bucket = (tab === 'sortasi-keluar' || tab === 'sortasi-kembali') ? 'sortasi' : tab;
+  // V8.9: Normalize produksi-ambil/produksi-selesai → 'produksi' bucket
+  let bucket = tab;
+  if (tab === 'sortasi-keluar' || tab === 'sortasi-kembali') bucket = 'sortasi';
+  else if (tab === 'produksi-ambil' || tab === 'produksi-selesai') bucket = 'produksi';
   if(!STATE.pending[bucket]) STATE.pending[bucket] = [];
   STATE.pending[bucket].push(r.data);
   saveState();
@@ -1260,12 +1372,203 @@ function collectForm(tab){
     if(qty<=0) errors.push('Qty > 0');
     if(reason.length<10) errors.push('Alasan min 10 karakter');
     data = { id, created, type:'adjustment', status:'pending', tanggal:date, grade, direction:dir, kg_masuk: dir==='in'?qty:0, kg_keluar: dir==='out'?qty:0, alasan:reason };
+  } else if(tab==='produksi-ambil'){
+    // V8.9 — Stage A: Kirim ke roastery
+    const tglA = document.getElementById('prd-tgl-ambil').value;
+    const sourceGrade = document.getElementById('prd-source-grade').value;
+    const qtyInput = parseFloat(document.getElementById('prd-qty-input').value)||0;
+    const vendor = document.getElementById('prd-vendor').value.trim();
+    const catatan = document.getElementById('prd-catatan-ambil').value.trim();
+    if(!tglA) errors.push('Tgl ambil wajib');
+    if(!sourceGrade) errors.push('Source grade wajib');
+    if(qtyInput<=0) errors.push('Qty input harus > 0');
+    if(!vendor) errors.push('Vendor roastery wajib');
+    const map = PROD_MAP_FE[sourceGrade] || {};
+    data = {
+      id, created, type:'produksi', action:'submit_produksi_ambil', status:'pending',
+      tanggal_ambil: tglA, source_grade: sourceGrade, qty_input_kg: qtyInput,
+      target_produk: map.target || '', vendor_roastery: vendor,
+      expected_output_kg: qtyInput * (1 - (map.susut_pct||0.20)),
+      expected_susut_pct: map.susut_pct || 0.20,
+      catatan
+    };
+  } else if(tab==='produksi-selesai'){
+    // V8.9 — Stage B: Kembali dari roastery
+    const batchId = document.getElementById('prd-batch-id').value;
+    const tglK = document.getElementById('prd-tgl-kembali').value;
+    const actualOut = parseFloat(document.getElementById('prd-actual-output').value)||0;
+    const biayaPerKg = parseFloat(document.getElementById('prd-biaya-per-kg').value)||0;
+    const biayaTotal = parseFloat(document.getElementById('prd-biaya-total').value)||0;
+    const biayaPackaging = parseFloat(document.getElementById('prd-biaya-packaging').value)||0;
+    const catatan = document.getElementById('prd-catatan-selesai').value.trim();
+    if(!batchId) errors.push('Pilih batch outstanding dulu');
+    if(!tglK) errors.push('Tgl kembali wajib');
+    if(actualOut<=0) errors.push('Actual output > 0');
+    if(biayaTotal<=0) errors.push('Biaya roasting total wajib > 0');
+    // Susut variance check — if variance != normal, catatan wajib
+    if (__produksiBatchSelected) {
+      const qtyInput = parseFloat(__produksiBatchSelected.qty_input_kg)||0;
+      const actualSusut = qtyInput > 0 ? (qtyInput - actualOut) / qtyInput : 0;
+      const grade = String(__produksiBatchSelected.source_grade||'').toUpperCase();
+      const map = PROD_MAP_FE[grade] || { tol_low: 0.15, tol_high: 0.25 };
+      const outOfTol = actualSusut < map.tol_low || actualSusut > map.tol_high;
+      if (outOfTol && !catatan) {
+        errors.push('Catatan WAJIB karena susut variance ' + (actualSusut*100).toFixed(1) + '% di luar tolerance ' + (map.tol_low*100).toFixed(0) + '-' + (map.tol_high*100).toFixed(0) + '%');
+      }
+    }
+    data = {
+      id, created, type:'produksi', action:'submit_produksi_selesai', status:'pending',
+      produksi_id: batchId,
+      tanggal_kembali: tglK, actual_output_kg: actualOut,
+      biaya_roasting_per_kg: biayaPerKg, biaya_roasting_total: biayaTotal,
+      biaya_packaging: biayaPackaging, catatan
+    };
+    // Backend uses 'id' field for lookup — alias
+    data.id_lookup = batchId;
   }
   if(errors.length>0) return { valid:false, error:errors.join(' · ') };
   return { valid:true, data };
 }
 
-function renderAllPending(){ ['sales-gb','sales-rb','pengeluaran','sortasi','adjustment'].forEach(renderPending); }
+function renderAllPending(){ ['sales-gb','sales-rb','pengeluaran','sortasi','produksi','adjustment'].forEach(renderPending); }
+
+// ============ PRODUKSI MODE TOGGLE + HELPERS (V8.9 Phase 2) ============
+const PROD_MAP_FE = {
+  'GBP': { target: 'RBP', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBC': { target: 'RBC', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBL': { target: 'RBL', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBS': { target: 'GC',  susut_pct: 0.28, tol_low: 0.23, tol_high: 0.33 },
+  'SIG': { target: 'RBSig', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 }
+};
+let __produksiActiveBatches = []; // cache batches in_progress for Mode B dropdown
+let __produksiBatchSelected = null;
+
+function setProduksiMode(mode){
+  const ambilBtn = document.getElementById('prd-mode-ambil-btn');
+  const selesaiBtn = document.getElementById('prd-mode-selesai-btn');
+  const ambilForm = document.getElementById('prd-form-ambil');
+  const selesaiForm = document.getElementById('prd-form-selesai');
+  if (mode === 'ambil') {
+    ambilBtn.classList.add('prd-mode-active');
+    ambilBtn.style.background = '#7A4A1F'; ambilBtn.style.color = '#fff'; ambilBtn.style.border = 'none';
+    selesaiBtn.classList.remove('prd-mode-active');
+    selesaiBtn.style.background = '#fff'; selesaiBtn.style.color = '#7A4A1F'; selesaiBtn.style.border = '2px solid #7A4A1F';
+    ambilForm.style.display = ''; selesaiForm.style.display = 'none';
+  } else {
+    selesaiBtn.classList.add('prd-mode-active');
+    selesaiBtn.style.background = '#7A4A1F'; selesaiBtn.style.color = '#fff'; selesaiBtn.style.border = 'none';
+    ambilBtn.classList.remove('prd-mode-active');
+    ambilBtn.style.background = '#fff'; ambilBtn.style.color = '#7A4A1F'; ambilBtn.style.border = '2px solid #7A4A1F';
+    selesaiForm.style.display = ''; ambilForm.style.display = 'none';
+    refreshProduksiBatches();
+  }
+}
+
+function onProduksiSourceChange(){
+  recalcProduksiExpected();
+}
+
+function recalcProduksiExpected(){
+  const grade = document.getElementById('prd-source-grade').value;
+  const qty = parseFloat(document.getElementById('prd-qty-input').value) || 0;
+  const map = PROD_MAP_FE[grade];
+  if (!map || qty <= 0) {
+    document.getElementById('prd-target-display').textContent = '—';
+    document.getElementById('prd-expected-output').textContent = '— KG';
+    document.getElementById('prd-expected-susut').textContent = '—%';
+    return;
+  }
+  const expectedOutput = qty * (1 - map.susut_pct);
+  document.getElementById('prd-target-display').textContent = map.target;
+  document.getElementById('prd-expected-output').textContent = expectedOutput.toFixed(2) + ' KG';
+  document.getElementById('prd-expected-susut').textContent = (map.susut_pct * 100).toFixed(0) + '%';
+}
+
+async function refreshProduksiBatches(){
+  const sel = document.getElementById('prd-batch-id');
+  sel.innerHTML = '<option value="">-- Loading... --</option>';
+  try {
+    const url = STATE.api_url || STATE.webhook_url;
+    if (!url) { sel.innerHTML = '<option value="">⚠ API URL belum di-set</option>'; return; }
+    const apiUrl = url.replace(/\?.*$/, '');
+    const res = await fetch(apiUrl + '?data=all', { method: 'GET' });
+    const json = await res.json();
+    const rows = (json.data && json.data.produksi) || [];
+    __produksiActiveBatches = rows.filter(r => String(r.status) === 'in_progress');
+    if (__produksiActiveBatches.length === 0) {
+      sel.innerHTML = '<option value="">(Tidak ada batch in_progress)</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">-- Pilih batch outstanding --</option>' +
+      __produksiActiveBatches.map(b => {
+        const ambil = String(b.tanggal_ambil || '').slice(0,10);
+        const lbl = b.id + ' · ' + b.qty_input_kg + ' KG ' + b.source_grade + ' → ' + b.target_produk +
+                    ' @ ' + (b.vendor_roastery || '?') + ' · ambil ' + ambil;
+        return '<option value="' + b.id + '">' + lbl + '</option>';
+      }).join('');
+  } catch(e) {
+    sel.innerHTML = '<option value="">⚠ Fetch error: ' + e.message + '</option>';
+  }
+}
+
+function onProduksiBatchSelected(){
+  const id = document.getElementById('prd-batch-id').value;
+  __produksiBatchSelected = __produksiActiveBatches.find(b => b.id === id);
+  if (!__produksiBatchSelected) {
+    document.getElementById('prd-batch-info').textContent = 'Pilih batch dari list di atas.';
+    return;
+  }
+  const b = __produksiBatchSelected;
+  document.getElementById('prd-batch-info').innerHTML =
+    '<strong>' + b.id + '</strong> · ' + b.qty_input_kg + ' KG ' + b.source_grade + ' → ' + b.target_produk +
+    ' @ ' + b.vendor_roastery + ' · expected output: <strong>' + parseFloat(b.expected_output_kg || 0).toFixed(2) + ' KG</strong>';
+  // Pre-fill biaya total based on qty_input * default biaya/KG
+  recalcProduksiBiaya();
+}
+
+function recalcProduksiSusut(){
+  if (!__produksiBatchSelected) return;
+  const qtyInput = parseFloat(__produksiBatchSelected.qty_input_kg) || 0;
+  const actual = parseFloat(document.getElementById('prd-actual-output').value) || 0;
+  if (qtyInput <= 0 || actual <= 0) {
+    document.getElementById('prd-actual-susut').textContent = '—%';
+    document.getElementById('prd-variance').textContent = '—';
+    document.getElementById('prd-vs-expected').textContent = '—';
+    document.getElementById('prd-variance-warning').style.display = 'none';
+    document.getElementById('prd-catatan-wajib').style.display = 'none';
+    return;
+  }
+  const actualSusut = (qtyInput - actual) / qtyInput;
+  const grade = String(__produksiBatchSelected.source_grade || '').toUpperCase();
+  const map = PROD_MAP_FE[grade] || { tol_low: 0.15, tol_high: 0.25, susut_pct: 0.20 };
+  let variance = 'normal', icon = '✅', color = '#5B9279';
+  if (actualSusut < map.tol_low) { variance = 'LOW WARNING'; icon = '🟡'; color = '#E8975A'; }
+  else if (actualSusut > map.tol_high) { variance = 'HIGH WARNING'; icon = '🟡'; color = '#E8975A'; }
+  document.getElementById('prd-actual-susut').textContent = (actualSusut * 100).toFixed(1) + '%';
+  document.getElementById('prd-variance').innerHTML = icon + ' <span style="color:' + color + '">' + variance + '</span>';
+  const expectedOutput = parseFloat(__produksiBatchSelected.expected_output_kg) || 0;
+  const diff = actual - expectedOutput;
+  document.getElementById('prd-vs-expected').innerHTML = (diff >= 0 ? '+' : '') + diff.toFixed(2) + ' KG';
+  const wEl = document.getElementById('prd-variance-warning');
+  const catWajib = document.getElementById('prd-catatan-wajib');
+  if (variance !== 'normal') {
+    wEl.style.display = '';
+    wEl.innerHTML = '⚠️ Susut <strong>' + (actualSusut * 100).toFixed(1) + '%</strong> di luar tolerance ' +
+                    (map.tol_low * 100).toFixed(0) + '-' + (map.tol_high * 100).toFixed(0) + '%. ' +
+                    '<strong>Catatan WAJIB diisi</strong> untuk submit (jelaskan penyebab: moisture? timing? batch kondisi?).';
+    catWajib.style.display = '';
+  } else {
+    wEl.style.display = 'none';
+    catWajib.style.display = 'none';
+  }
+}
+
+function recalcProduksiBiaya(){
+  if (!__produksiBatchSelected) return;
+  const qtyInput = parseFloat(__produksiBatchSelected.qty_input_kg) || 0;
+  const perKg = parseFloat(document.getElementById('prd-biaya-per-kg').value) || 0;
+  document.getElementById('prd-biaya-total').value = Math.round(qtyInput * perKg);
+}
 
 // ============ NOTA / INVOICE — multi-item cart ============
 let NOTA_ITEMS = []; // cart state in-memory

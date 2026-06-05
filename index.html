@@ -199,6 +199,7 @@ footer a{color:var(--steel);text-decoration:none}
       <button class="tab" data-pane="hpp"><span class="tab-icon">💰</span><span class="tab-label">HPP Reference</span></button>
       <button class="tab" data-pane="logbook"><span class="tab-icon">📋</span><span class="tab-label">LogBook GB</span></button>
       <button class="tab" data-pane="sort"><span class="tab-icon">🌾</span><span class="tab-label">Sortasi</span></button>
+      <button class="tab" data-pane="produksi"><span class="tab-icon">🔥</span><span class="tab-label">Produksi RB/GC</span></button>
       <button class="tab" data-pane="nota"><span class="tab-icon">🧾</span><span class="tab-label">Nota</span></button>
     </div>
   </aside>
@@ -1053,6 +1054,69 @@ footer a{color:var(--steel);text-decoration:none}
   </div>
 </div>
 
+<!-- PRODUKSI PANE (V8.9 — 6 Juni 2026, Phase 2 panen) -->
+<div class="tab-pane" id="pane-produksi">
+  <div class="section">
+    <h2>🔥 Produksi Roasting GB → RB/GC <span class="badge" id="prod-count">— batch</span></h2>
+    <div class="note">Tracking 2-stage: <strong>Stage A</strong> ambil GB ke roastery (status <em>in_progress</em>) → <strong>Stage B</strong> kembali dengan RB/GC + biaya roasting (status <em>selesai</em>). Stock auto-update via GB_Movement + biaya auto-record di Pengeluaran kategori "Roasting".</div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:18px">
+      <div class="kpi" style="background:#FFF3E0;border:2px solid #E8975A">
+        <div class="label" style="color:#7A4A1F;font-weight:700">⏳ Active Batches</div>
+        <div class="value" id="prod-kpi-active" style="color:#E8975A;font-size:22px">—</div>
+        <div class="sub" id="prod-kpi-active-sub">in_progress</div>
+      </div>
+      <div class="kpi" style="background:#E0EBF5;border:2px solid #3A6EA5">
+        <div class="label" style="color:#1B2A41;font-weight:700">📊 Total Processed</div>
+        <div class="value" id="prod-kpi-total-kg" style="color:#3A6EA5;font-size:22px">— KG</div>
+        <div class="sub">GB input (selesai)</div>
+      </div>
+      <div class="kpi" style="background:#DAEBE0;border:2px solid #5B9279">
+        <div class="label" style="color:#2D5640;font-weight:700">📉 Avg Susut</div>
+        <div class="value" id="prod-kpi-avg-susut" style="color:#5B9279;font-size:22px">—%</div>
+        <div class="sub">selesai batches</div>
+      </div>
+      <div class="kpi" style="background:#FCE5D2;border:2px solid #E89F4D">
+        <div class="label" style="color:#7A4A1F;font-weight:700">💰 Total Biaya</div>
+        <div class="value" id="prod-kpi-total-biaya" style="color:#E89F4D;font-size:18px">Rp —</div>
+        <div class="sub">roasting + packaging</div>
+      </div>
+    </div>
+
+    <!-- Section: Active Batches -->
+    <h3 style="margin-top:24px;color:#7A4A1F">⏳ Batch Aktif (in_progress)</h3>
+    <div class="note" style="background:#FFF7ED;border-left:3px solid #E8975A">Batch yang sudah dikirim ke roastery tapi belum kembali. Tunggu produk selesai → submit Mode B di Entry Dashboard untuk update stock + biaya.</div>
+    <table class="data-table" id="tbl-prod-active">
+      <thead>
+        <tr><th>ID</th><th>Ambil</th><th>Source</th><th>Qty</th><th>Target</th><th>Vendor</th><th>Expected Output</th><th>Catatan</th></tr>
+      </thead>
+      <tbody><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Memuat…</td></tr></tbody>
+    </table>
+
+    <!-- Section: Completed History -->
+    <h3 style="margin-top:24px;color:#2D5640">✅ Riwayat Selesai</h3>
+    <div class="note" style="background:#F0F7E8;border-left:3px solid #5B9279">Batch yang sudah selesai (RB/GC sudah kembali, biaya tercatat). Susut flag kuning kalau di luar tolerance.</div>
+    <table class="data-table" id="tbl-prod-completed">
+      <thead>
+        <tr><th>ID</th><th>Ambil</th><th>Kembali</th><th>Source → Target</th><th>Qty In</th><th>Output</th><th>Susut %</th><th>Variance</th><th>Vendor</th><th>Biaya</th></tr>
+      </thead>
+      <tbody><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px">Memuat…</td></tr></tbody>
+    </table>
+
+    <!-- Reference info -->
+    <div style="background:#F8F5F2;border:1px solid #E5DCD3;border-radius:8px;padding:14px 18px;margin-top:20px">
+      <strong style="color:#7B3F61">PROD_MAP (locked 5 Juni 2026):</strong>
+      <div style="font-size:11.5px;color:#555;margin-top:8px;line-height:1.7">
+        GBP → RBP · GBC → RBC · GBL → RBL (susut 20%, tolerance 15-25%)<br/>
+        GBS → GC (susut 28%, tolerance 23-33%, combined roast+grind)<br/>
+        SIG → RBSig (susut 20%, tolerance 15-25% — GB Signature dari kebun wakaf)<br/>
+        Industry benchmark Vienna roast level. Biaya default Rp 12.500/KG GB input.
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- NOTA PANE (V8.4 — 26 Mei 2026) -->
 <div class="tab-pane" id="pane-nota">
   <div class="section">
@@ -1358,6 +1422,12 @@ function mergeApiData(apiResponse) {
   } else {
     D.gb_movements = D.gb_movements || [];
   }
+  // V8.9 — Produksi (Phase 2 panen 2026)
+  if (data.produksi && Array.isArray(data.produksi)) {
+    D.produksi = data.produksi;
+  } else {
+    D.produksi = D.produksi || [];
+  }
   // === V7 SUMMARY from API (server-side computed) ===
   if (data.summary) {
     D.api_summary = data.summary;
@@ -1368,6 +1438,10 @@ function mergeApiData(apiResponse) {
   // after fresh data merged. Eliminates Issue A render race (cards stuck at "—" or 0).
   if (typeof renderLogBookFull === 'function') {
     try { renderLogBookFull(); } catch(e) { console.warn('[V8.7] renderLogBookFull after merge failed:', e); }
+  }
+  // V8.9 — Re-render Produksi tab after fresh merge
+  if (typeof renderProduksiFull === 'function') {
+    try { renderProduksiFull(); } catch(e) { console.warn('[V8.9] renderProduksiFull after merge failed:', e); }
   }
 }
 
@@ -4287,6 +4361,80 @@ function renderLogBookFull(){
 }
 // V8.7 — Initial render call (replaces old `if(LB){...}` immediate-execute pattern)
 renderLogBookFull();
+
+// ============= V8.9 PRODUKSI RB/GC RENDER (Phase 2 panen 2026) =============
+function renderProduksiFull(){
+  const rows = (D.produksi || []).filter(r => r && r.id);
+  // KPI
+  const active = rows.filter(r => String(r.status) === 'in_progress');
+  const selesai = rows.filter(r => String(r.status) === 'selesai');
+  const totalKgInput = selesai.reduce((s,r) => s + (parseFloat(r.qty_input_kg)||0), 0);
+  const susutValues = selesai.map(r => parseFloat(r.actual_susut_pct)||0).filter(v => v > 0);
+  const avgSusut = susutValues.length > 0 ? susutValues.reduce((s,v) => s+v, 0) / susutValues.length : 0;
+  const totalBiaya = selesai.reduce((s,r) => s + (parseFloat(r.biaya_roasting_total)||0) + (parseFloat(r.biaya_packaging)||0), 0);
+  const countEl = document.getElementById('prod-count');
+  if (countEl) countEl.textContent = rows.length + ' batch (' + active.length + ' aktif · ' + selesai.length + ' selesai)';
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = val; };
+  setVal('prod-kpi-active', active.length);
+  setVal('prod-kpi-active-sub', active.length + ' in_progress @ roastery');
+  setVal('prod-kpi-total-kg', fmtN(totalKgInput, 1) + ' <span style="font-size:14px;color:var(--muted)">KG</span>');
+  setVal('prod-kpi-avg-susut', (avgSusut * 100).toFixed(1) + '%');
+  setVal('prod-kpi-total-biaya', '<span style="font-size:13px;color:var(--muted)">Rp</span> ' + fmtN(totalBiaya, 0));
+  // Active batches table
+  const activeTb = document.querySelector('#tbl-prod-active tbody');
+  if (activeTb) {
+    if (active.length === 0) {
+      activeTb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px;font-style:italic">Belum ada batch in_progress. Submit Mode A di Entry Dashboard untuk mulai.</td></tr>';
+    } else {
+      activeTb.innerHTML = active.sort((a,b) => String(b.tanggal_ambil||'').localeCompare(String(a.tanggal_ambil||''))).map(b => {
+        const tgl = String(b.tanggal_ambil||'').slice(0,10);
+        return '<tr>' +
+          '<td style="font-weight:600">' + (b.id||'') + '</td>' +
+          '<td>' + tgl + '</td>' +
+          '<td><span class="tag tag-gb" style="font-size:10.5px">' + (b.source_grade||'') + '</span></td>' +
+          '<td class="num">' + fmtN(b.qty_input_kg, 2) + ' KG</td>' +
+          '<td><span class="tag" style="background:#FCE5D2;color:#7A4A1F;font-size:10.5px">' + (b.target_produk||'') + '</span></td>' +
+          '<td>' + (b.vendor_roastery||'') + '</td>' +
+          '<td class="num">' + fmtN(b.expected_output_kg, 2) + ' KG</td>' +
+          '<td style="font-size:11.5px;color:var(--muted)">' + (b.catatan||'') + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+  }
+  // Completed history table
+  const compTb = document.querySelector('#tbl-prod-completed tbody');
+  if (compTb) {
+    if (selesai.length === 0) {
+      compTb.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px;font-style:italic">Belum ada batch selesai.</td></tr>';
+    } else {
+      compTb.innerHTML = selesai.sort((a,b) => String(b.tanggal_kembali||'').localeCompare(String(a.tanggal_kembali||''))).map(b => {
+        const ambil = String(b.tanggal_ambil||'').slice(0,10);
+        const kembali = String(b.tanggal_kembali||'').slice(0,10);
+        const susutPct = parseFloat(b.actual_susut_pct)||0;
+        const variance = String(b.susut_variance||'normal');
+        let varBadge, varColor;
+        if (variance === 'low_warning') { varBadge = '🟡 LOW'; varColor = '#E8975A'; }
+        else if (variance === 'high_warning') { varBadge = '🟡 HIGH'; varColor = '#E8975A'; }
+        else { varBadge = '✅ Normal'; varColor = '#5B9279'; }
+        const biayaTotal = (parseFloat(b.biaya_roasting_total)||0) + (parseFloat(b.biaya_packaging)||0);
+        return '<tr>' +
+          '<td style="font-weight:600">' + (b.id||'') + '</td>' +
+          '<td>' + ambil + '</td>' +
+          '<td>' + kembali + '</td>' +
+          '<td><span class="tag tag-gb" style="font-size:10.5px">' + (b.source_grade||'') + '</span> → <span class="tag" style="background:#FCE5D2;color:#7A4A1F;font-size:10.5px">' + (b.target_produk||'') + '</span></td>' +
+          '<td class="num">' + fmtN(b.qty_input_kg, 2) + '</td>' +
+          '<td class="num" style="font-weight:600">' + fmtN(b.actual_output_kg, 2) + '</td>' +
+          '<td class="num" style="color:' + varColor + ';font-weight:600">' + (susutPct * 100).toFixed(1) + '%</td>' +
+          '<td><span style="color:' + varColor + ';font-weight:600;font-size:11px">' + varBadge + '</span></td>' +
+          '<td>' + (b.vendor_roastery||'') + '</td>' +
+          '<td class="num"><span style="color:var(--muted);font-size:10px">Rp</span> ' + fmtN(biayaTotal, 0) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+  }
+}
+// V8.9 — Initial render call
+renderProduksiFull();
 
 </script>
 

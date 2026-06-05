@@ -49,7 +49,8 @@ const SHEETS = {
   SALES_RB: 'Sales_RB',
   LOGBOOK: 'Logbook',
   NOTA: 'Nota',
-  NOTA_MISC: 'Nota_Misc'
+  NOTA_MISC: 'Nota_Misc',
+  PRODUKSI: 'Produksi'  // V8.9 — Phase 2 panen 2026
 };
 
 const NOTA_HEADERS = [
@@ -76,6 +77,25 @@ const SORTASI_HEADERS_V7 = [
   'gbp', 'gbc', 'gbl', 'gbs', 'total_setor', 'susut', 'yield_pct',
   'ongkos', 'ongkos_paid', 'paid_date', 'pengeluaran_ref_id', 'created_at'
 ];
+
+// V8.9 — PRODUKSI Roasting tracking (Phase 2, panen 2026)
+const PRODUKSI_HEADERS = [
+  'id', 'tanggal_ambil', 'source_grade', 'qty_input_kg', 'target_produk',
+  'expected_output_kg', 'expected_susut_pct',
+  'tanggal_kembali', 'actual_output_kg', 'actual_susut_pct', 'susut_variance',
+  'vendor_roastery', 'biaya_roasting_per_kg', 'biaya_roasting_total', 'biaya_packaging',
+  'status', 'pengeluaran_ref_id', 'catatan', 'created_at'
+];
+
+// PROD_MAP: source GB grade → target produk, expected susut, tolerance window
+// Locked per DESIGN_SPEC_Produksi_Tab_5Juni2026.md (industri benchmark Vienna roast ~20%)
+const PROD_MAP = {
+  'GBP': { target: 'RBP', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBC': { target: 'RBC', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBL': { target: 'RBL', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 },
+  'GBS': { target: 'GC',  susut_pct: 0.28, tol_low: 0.23, tol_high: 0.33 }, // combined roast+grind
+  'SIG': { target: 'RBSig', susut_pct: 0.20, tol_low: 0.15, tol_high: 0.25 } // GB Signature dari kebun wakaf
+};
 
 // Baseline 5 Mei 2026 opname
 const BASELINE_5MEI = [
@@ -133,7 +153,8 @@ function doGet(e) {
       sales_gb:     readSheet_(ss, SHEETS.SALES_GB),
       sales_rb:     readSheet_(ss, SHEETS.SALES_RB),
       logbook:      readSheet_(ss, SHEETS.LOGBOOK),
-      nota:         readSheet_(ss, SHEETS.NOTA)
+      nota:         readSheet_(ss, SHEETS.NOTA),
+      produksi:     readSheet_(ss, SHEETS.PRODUKSI)  // V8.9 Phase 2
     };
     // Compute summary
     data.summary = computeStockSummary_(data.gb_movements);
@@ -209,6 +230,15 @@ function doPost(e) {
         break;
       case 'delete_nota':
         result = handleDeleteNota_(ss, body);
+        break;
+      // V8.9 — Produksi Roasting (Phase 2 panen 2026)
+      case 'submit_produksi_ambil':
+      case 'produksi_ambil':
+        result = handleSubmitProduksiAmbil_(ss, body);
+        break;
+      case 'submit_produksi_selesai':
+      case 'produksi_selesai':
+        result = handleSubmitProduksiSelesai_(ss, body);
         break;
       default:
         result = { ok: false, error: 'Unknown action: ' + action };
@@ -1520,5 +1550,237 @@ function handleEditNotaFull_(ss, body) {
     items_count: items.length,
     items_inserted: insertedIds,
     cleanup: report.join(' | ')
+  };
+}
+
+// ============================================================================
+// V8.9 — PRODUKSI ROASTING HANDLERS (Phase 2, panen 2026)
+// ============================================================================
+
+/**
+ * Generate sequential Produksi ID: PRD-YYYY-NNNN
+ * Reads existing PRODUKSI sheet, picks max NNNN+1 for current year.
+ */
+function generateProduksiId_(ss) {
+  const sheet = ensureSheet_(ss, SHEETS.PRODUKSI, PRODUKSI_HEADERS);
+  const year = new Date().getFullYear();
+  const prefix = 'PRD-' + year + '-';
+  const lr = sheet.getLastRow();
+  let max = 0;
+  if (lr > 1) {
+    const ids = sheet.getRange(2, 1, lr - 1, 1).getValues();
+    ids.forEach(r => {
+      const id = String(r[0] || '');
+      if (id.indexOf(prefix) === 0) {
+        const n = parseInt(id.substring(prefix.length), 10);
+        if (!isNaN(n) && n > max) max = n;
+      }
+    });
+  }
+  return prefix + String(max + 1).padStart(4, '0');
+}
+
+/**
+ * V8.9 — Stage A: GB ambil ke roastery (status='in_progress').
+ * Body: {
+ *   tanggal_ambil:  'YYYY-MM-DD',
+ *   source_grade:   'GBP'|'GBC'|'GBL'|'GBS'|'SIG',
+ *   qty_input_kg:   number,
+ *   target_produk:  optional override (default from PROD_MAP),
+ *   vendor_roastery:'Equal Roastery' | custom,
+ *   catatan:        optional
+ * }
+ * Atomic: append Produksi row + GB_Movement (-source_grade dari di_tempat).
+ */
+function handleSubmitProduksiAmbil_(ss, body) {
+  // Validate
+  const sourceGrade = String(body.source_grade || '').toUpperCase();
+  const qtyInput = parseFloat(body.qty_input_kg || 0);
+  const vendor = String(body.vendor_roastery || '').trim();
+  if (!PROD_MAP[sourceGrade]) {
+    return { ok: false, error: 'Invalid source_grade: ' + sourceGrade + ' (must be GBP/GBC/GBL/GBS/SIG)' };
+  }
+  if (!(qtyInput > 0)) {
+    return { ok: false, error: 'qty_input_kg must be > 0, got: ' + body.qty_input_kg };
+  }
+  if (!vendor) {
+    return { ok: false, error: 'vendor_roastery required' };
+  }
+  const mapping = PROD_MAP[sourceGrade];
+  const targetProduk = String(body.target_produk || mapping.target).toUpperCase();
+  const expectedOutput = +(qtyInput * (1 - mapping.susut_pct)).toFixed(3);
+  const expectedSusutPct = mapping.susut_pct;
+  const tglAmbil = String(body.tanggal_ambil || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  const catatan = String(body.catatan || '');
+  // Generate id + sheet ensure
+  const produksiId = generateProduksiId_(ss);
+  const sheet = ensureSheet_(ss, SHEETS.PRODUKSI, PRODUKSI_HEADERS);
+  // Build row
+  const row = PRODUKSI_HEADERS.map(h => {
+    switch (h) {
+      case 'id': return produksiId;
+      case 'tanggal_ambil': return tglAmbil;
+      case 'source_grade': return sourceGrade;
+      case 'qty_input_kg': return qtyInput;
+      case 'target_produk': return targetProduk;
+      case 'expected_output_kg': return expectedOutput;
+      case 'expected_susut_pct': return expectedSusutPct;
+      case 'vendor_roastery': return vendor;
+      case 'status': return 'in_progress';
+      case 'catatan': return catatan;
+      case 'created_at': return new Date().toISOString();
+      default: return '';
+    }
+  });
+  sheet.appendRow(row);
+  // Atomic: GB_Movement negative dari di_tempat → di_roastery:{vendor}
+  appendMovement_(ss, {
+    tanggal_iso: tglAmbil,
+    source: 'produksi_ambil',
+    grade: sourceGrade,
+    qty_signed: -qtyInput,
+    lokasi: 'di_roastery:' + vendor,
+    pekerja: '',
+    ref_id: produksiId,
+    catatan: 'Ambil ' + qtyInput + ' KG ' + sourceGrade + ' → ' + targetProduk + ' @ ' + vendor
+  });
+  formatAndSortAll_(ss);
+  return {
+    ok: true,
+    produksi_id: produksiId,
+    expected_output_kg: expectedOutput,
+    expected_susut_pct: expectedSusutPct,
+    target_produk: targetProduk,
+    status: 'in_progress'
+  };
+}
+
+/**
+ * V8.9 — Stage B: Kembali dari roastery (status='in_progress' → 'selesai').
+ * Body: {
+ *   id:                'PRD-YYYY-NNNN',
+ *   tanggal_kembali:   'YYYY-MM-DD',
+ *   actual_output_kg:  number,
+ *   biaya_roasting_per_kg: number,
+ *   biaya_roasting_total:  number (optional, auto: per_kg × qty_input),
+ *   biaya_packaging:   number (optional, default 0),
+ *   catatan:           string (WAJIB kalau susut variance outside tolerance)
+ * }
+ * Atomic: update Produksi row + GB_Movement (+target_produk) + Pengeluaran row.
+ */
+function handleSubmitProduksiSelesai_(ss, body) {
+  // Prefer body.produksi_id (entry has its own uid in body.id). Fallback to body.id for direct API calls.
+  const produksiId = String(body.produksi_id || body.id || '').trim();
+  if (!produksiId) return { ok: false, error: 'produksi_id required' };
+  const actualOutput = parseFloat(body.actual_output_kg || 0);
+  if (!(actualOutput > 0)) {
+    return { ok: false, error: 'actual_output_kg must be > 0' };
+  }
+  // Find Produksi row
+  const sheet = ensureSheet_(ss, SHEETS.PRODUKSI, PRODUKSI_HEADERS);
+  const lr = sheet.getLastRow();
+  if (lr < 2) return { ok: false, error: 'No Produksi rows yet' };
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const idCol = headers.indexOf('id');
+  const ids = sheet.getRange(2, idCol + 1, lr - 1, 1).getValues().map(r => String(r[0] || ''));
+  const idx = ids.indexOf(produksiId);
+  if (idx < 0) return { ok: false, error: 'Produksi id not found: ' + produksiId };
+  const rowNum = idx + 2;
+  // Read row to get source_grade, qty_input, target_produk, vendor, status
+  const rowData = sheet.getRange(rowNum, 1, 1, headers.length).getValues()[0];
+  const obj = {};
+  headers.forEach((h, i) => { obj[h] = rowData[i]; });
+  if (String(obj.status) !== 'in_progress') {
+    return { ok: false, error: 'Produksi ' + produksiId + ' status=' + obj.status + ' (must be in_progress)' };
+  }
+  const qtyInput = parseFloat(obj.qty_input_kg) || 0;
+  const sourceGrade = String(obj.source_grade || '').toUpperCase();
+  const targetProduk = String(obj.target_produk || '').toUpperCase();
+  const vendor = String(obj.vendor_roastery || '');
+  // Compute susut
+  const actualSusutPct = qtyInput > 0 ? +((qtyInput - actualOutput) / qtyInput).toFixed(4) : 0;
+  const mapping = PROD_MAP[sourceGrade] || { tol_low: 0.15, tol_high: 0.25 };
+  let susutVariance = 'normal';
+  if (actualSusutPct < mapping.tol_low) susutVariance = 'low_warning';
+  else if (actualSusutPct > mapping.tol_high) susutVariance = 'high_warning';
+  const catatan = String(body.catatan || '').trim();
+  if (susutVariance !== 'normal' && !catatan) {
+    return {
+      ok: false,
+      error: 'Catatan WAJIB karena susut ' + (actualSusutPct * 100).toFixed(1) + '% di luar tolerance ' +
+             (mapping.tol_low * 100).toFixed(0) + '-' + (mapping.tol_high * 100).toFixed(0) + '%. ' +
+             'Variance: ' + susutVariance,
+      susut_variance: susutVariance,
+      actual_susut_pct: actualSusutPct
+    };
+  }
+  // Biaya
+  const biayaPerKg = parseFloat(body.biaya_roasting_per_kg || 0);
+  const biayaTotal = parseFloat(body.biaya_roasting_total || (biayaPerKg * qtyInput));
+  const biayaPackaging = parseFloat(body.biaya_packaging || 0);
+  if (!(biayaTotal >= 0)) return { ok: false, error: 'biaya_roasting_total must be >= 0' };
+  const tglKembali = String(body.tanggal_kembali || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+  // Atomic: Append Pengeluaran first (to get ref_id for cross-link)
+  const pengSheet = ensureSheet_(ss, SHEETS.PENGELUARAN, []);
+  const pengHeaders = pengSheet.getRange(1, 1, 1, pengSheet.getLastColumn()).getValues()[0];
+  const pengId = 'PEN_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  const pengTotal = biayaTotal + biayaPackaging;
+  const pengDeskripsi = 'Roasting ' + qtyInput + ' KG ' + sourceGrade + ' → ' + targetProduk +
+                         ' @ ' + vendor + ' (' + produksiId + ')';
+  const pengRow = pengHeaders.map(h => {
+    if (h === 'id') return pengId;
+    if (h === 'tanggal') return tglKembali;
+    if (h === 'kategori') return 'Roasting';
+    if (h === 'deskripsi') return pengDeskripsi;
+    if (h === 'total') return pengTotal;
+    if (h === 'supplier') return vendor;
+    if (h === 'qty') return qtyInput;  // qty GB input untuk audit trail
+    if (h === 'harga_per_kg') return biayaPerKg;
+    if (h === 'ref_id') return produksiId;
+    if (h === 'catatan') return catatan || ('Biaya roasting Rp ' + biayaPerKg + '/KG' +
+                            (biayaPackaging > 0 ? ' + packaging Rp ' + biayaPackaging : ''));
+    if (h === 'created_at') return new Date().toISOString();
+    return '';
+  });
+  pengSheet.appendRow(pengRow);
+  // Atomic: GB_Movement positive (+target_produk di_tempat)
+  appendMovement_(ss, {
+    tanggal_iso: tglKembali,
+    source: 'produksi_selesai',
+    grade: targetProduk,
+    qty_signed: +actualOutput,
+    lokasi: 'di_tempat',
+    pekerja: '',
+    ref_id: produksiId,
+    catatan: 'Kembali dari ' + vendor + ': ' + actualOutput + ' KG ' + targetProduk +
+              ' (susut ' + (actualSusutPct * 100).toFixed(1) + '%, ' + susutVariance + ')'
+  });
+  // Update Produksi row with all selesai fields
+  const updates = {
+    tanggal_kembali: tglKembali,
+    actual_output_kg: actualOutput,
+    actual_susut_pct: actualSusutPct,
+    susut_variance: susutVariance,
+    biaya_roasting_per_kg: biayaPerKg,
+    biaya_roasting_total: biayaTotal,
+    biaya_packaging: biayaPackaging,
+    status: 'selesai',
+    pengeluaran_ref_id: pengId,
+    catatan: catatan || obj.catatan
+  };
+  Object.keys(updates).forEach(field => {
+    const col = headers.indexOf(field);
+    if (col >= 0) sheet.getRange(rowNum, col + 1).setValue(updates[field]);
+  });
+  formatAndSortAll_(ss);
+  return {
+    ok: true,
+    produksi_id: produksiId,
+    actual_output_kg: actualOutput,
+    actual_susut_pct: actualSusutPct,
+    susut_variance: susutVariance,
+    biaya_total: pengTotal,
+    pengeluaran_ref_id: pengId,
+    status: 'selesai'
   };
 }
