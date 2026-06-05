@@ -1306,10 +1306,12 @@ function mergeApiData(apiResponse) {
     D.sortasi_batches = data.sortasi.map((s, i) => ({
       no: i + 1,
       pekerja: s.pekerja || '',
-      tgl_ambil: __formatIdnDate(s.tgl_ambil) || (s.tgl_ambil || '').slice(0,10),
-      tgl_ambil_iso: (s.tgl_ambil || '').slice(0,10),
-      tgl_setor: __formatIdnDate(s.tgl_setor) || (s.tgl_setor || '').slice(0,10),
-      tgl_setor_iso: (s.tgl_setor || '').slice(0,10),
+      // V8.7.1 — defensive String() cast: anomalous Sheet row dengan tgl as Number (mis. tgl_setor=8)
+      // crash mergeApiData (Number.slice tidak ada). String() handle Number, null, undefined sama.
+      tgl_ambil: __formatIdnDate(s.tgl_ambil) || String(s.tgl_ambil || '').slice(0,10),
+      tgl_ambil_iso: String(s.tgl_ambil || '').slice(0,10),
+      tgl_setor: __formatIdnDate(s.tgl_setor) || String(s.tgl_setor || '').slice(0,10),
+      tgl_setor_iso: String(s.tgl_setor || '').slice(0,10),
       bakalan: s.bakalan || '',
       grade_input: s.grade_input || '',
       qty_input: +s.qty_input || 0,
