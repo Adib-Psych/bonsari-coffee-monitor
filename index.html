@@ -1944,10 +1944,13 @@ async function __manualSyncTrigger() {
       mergeApiData(fresh);
       // Update signature so polling doesn't re-trigger reload
       __lastDataSignature = __dataSignature(fresh);
-      __syncToast('✓ Data fresh · diperbarui', 'ok');
+      __syncToast('✓ Sync · memuat ulang semua tab…', 'ok');
       __updateSyncIndicator();
-      // V8.7 — In-place re-render (no page reload). mergeApiData already triggered renderLogBookFull internally.
-      // Keep soft refresh path available for explicit reload scenarios, but default to in-place.
+      // V8.8 — Explicit user click 🔄 = soft reload (preserve tab + scroll).
+      // mergeApiData hanya re-render LogBook HERO (V8.7); tab lain (Pengeluaran, Sales, Nota)
+      // pakai module-level render pattern yang cuma jalan saat page parse — perlu reload.
+      // Polling 30s tetap silent (V8.6b discipline preserved untuk auto-poll).
+      setTimeout(__doSoftRefresh, 1200);
     } else {
       window.__syncStatus = 'err';
       __updateSyncIndicator();
