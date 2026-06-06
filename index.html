@@ -1443,19 +1443,31 @@ function mergeApiData(apiResponse) {
   if (typeof renderProduksiFull === 'function') {
     try { renderProduksiFull(); } catch(e) { console.warn('[V8.9] renderProduksiFull after merge failed:', e); }
   }
-  // V9.1 F4 — Re-render Overview/Akuntansi/Worker Payment after fresh merge
-  // Skip kalau user typing (preserve input focus + scroll position)
+  // V9.2 F4 — Extended chain: re-render SEMUA named function setelah fresh merge.
+  // Skip kalau user typing (preserve input focus + scroll position).
   const __active = document.activeElement;
   const __isTyping = __active && __active.matches && __active.matches('input,textarea,select');
   if (!__isTyping) {
-    ['renderOverview','renderAkuntansi','renderWorkerPayment'].forEach(fnName => {
+    // Tab content render functions (in-place DOM update):
+    [
+      'renderOverview',         // V9.1 — Cash Position card + breakdown table
+      'renderAkuntansi',        // V9.1 — Akuntansi tab (P&L, neraca, reclass, insights, educational)
+      'renderWorkerPayment',    // V9.1 — Sortasi tab worker cards (was IIFE)
+      'renderGB',               // V9.2 — Penjualan GB tab tables + KPIs
+      'renderRB',               // V9.2 — Penjualan RB tab tables + KPIs
+      'renderExp',              // V9.2 — Pengeluaran tab tables + KPIs
+      'renderHppPackMatrix',    // V9.2 — HPP Reference matrix
+      'renderMarginDistribution' // V9.2 — Akuntansi margin distribution viz
+      // NOTE: renderNotaTab skipped — async, has own filter handlers
+      // NOTE: renderLogBookFull + renderProduksiFull already called above (V8.7 + V8.9)
+    ].forEach(fnName => {
       const fn = window[fnName];
       if (typeof fn === 'function') {
-        try { fn(); } catch(e) { console.warn('[V9.1] ' + fnName + ' after merge failed:', e); }
+        try { fn(); } catch(e) { console.warn('[V9.2] ' + fnName + ' after merge failed:', e); }
       }
     });
   } else {
-    console.log('[V9.1] User typing — defer render to avoid focus loss');
+    console.log('[V9.2] User typing — defer render to avoid focus loss');
   }
 }
 
