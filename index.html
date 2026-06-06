@@ -1428,6 +1428,64 @@ function mergeApiData(apiResponse) {
   } else {
     D.produksi = D.produksi || [];
   }
+  // V9.3 F4 — Rebuild D.logbook.movements dari gb_movements live.
+  // Sebelumnya PRELOAD static → Pergerakan Stock tab stuck saat panen (Adib panen aktif tidak lihat update).
+  if (D.gb_movements && D.gb_movements.length > 0) {
+    if (!D.logbook) D.logbook = {};
+    // Map source → display tipe
+    const tipeMap = {
+      'baseline': 'Opname Awal',
+      'pembelian': 'Pembelian',
+      'sales_gb': 'Penjualan GB',
+      'sales_rb_roast': 'Roasting → RB Sales',
+      'sortasi_keluar': 'Sortasi Keluar',
+      'sortasi_kembali': 'Sortasi Kembali',
+      'produksi_ambil': 'Produksi Ambil',
+      'produksi_selesai': 'Produksi Selesai',
+      'manual_adj': 'Manual Adjustment'
+    };
+    const idnMonths = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    const fmtIdn = iso => {
+      if (!iso) return '';
+      const m = String(iso).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return String(iso).slice(0,10);
+      return parseInt(m[3]) + ' ' + idnMonths[parseInt(m[2])-1] + ' ' + m[1];
+    };
+    // Sort by tanggal_iso ascending untuk hitung saldo_running per grade
+    const sorted = [...D.gb_movements].sort((a,b) => String(a.tanggal_iso||'').localeCompare(String(b.tanggal_iso||'')));
+    const runningPerGrade = {};
+    const nowMs = Date.now();
+    const RECENT_MS = 30 * 60 * 1000; // 30 menit
+    D.logbook.movements = sorted.map((m, i) => {
+      const grade = String(m.grade||'').toUpperCase();
+      const qty = parseFloat(m.qty_signed)||0;
+      runningPerGrade[grade] = (runningPerGrade[grade]||0) + qty;
+      const tipe = tipeMap[m.source] || m.source || '—';
+      const isIn = qty > 0;
+      // Extract pelanggan/produk dari catatan kalau ada (mis. "Pembelian dari Bu Ina (50 KG)" → pelanggan=Bu Ina)
+      let pelanggan = '', produk = '';
+      const cat = String(m.catatan||'');
+      const matchSupplier = cat.match(/dari ([^()]+?)\s*\(/);
+      if (matchSupplier) pelanggan = matchSupplier[1].trim();
+      const createdMs = m.created_at ? new Date(m.created_at).getTime() : 0;
+      const isRecent = createdMs && (nowMs - createdMs) < RECENT_MS;
+      return {
+        no: i + 1,
+        tanggal: fmtIdn(m.tanggal_iso),
+        tanggal_iso: m.tanggal_iso,
+        tipe: tipe + (isRecent ? ' ✨' : ''),
+        pelanggan: pelanggan || m.pekerja || '',
+        produk: produk,
+        grade: grade,
+        kg_masuk: isIn ? qty : 0,
+        kg_keluar: isIn ? 0 : Math.abs(qty),
+        saldo_running: runningPerGrade[grade],
+        catatan: cat,
+        ref_id: m.ref_id || '',
+        _recent: isRecent
+      };
+    });
+  }
   // === V7 SUMMARY from API (server-side computed) ===
   if (data.summary) {
     D.api_summary = data.summary;
