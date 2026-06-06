@@ -1871,24 +1871,50 @@ async function syncEntry(tab, entry){
   if(!STATE.webhook_url){ toast('Webhook URL belum di-set','error'); return; }
   updateSyncChip('syncing');
   try{
-    // V7: send entry directly (action field already set in collectForm)
-    // For backward compat: include 'tab' AND spread entry to top level
+    // V9.0 F2 — STOP SILENT DATA LOSS: parse response, mark failed kalau backend reject.
+    // Pattern dari submitNota (proven works) — Apps Script Web App return CORS-friendly JSON.
+    // BEFORE V9.0: mode:'no-cors' + assume synced → backend reject = entry hilang dari pending.
     const payload = { tab, ...entry };
-    await fetch(STATE.webhook_url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload) });
-    entry.status = 'synced';
-    entry.synced_at = new Date().toISOString();
-    STATE.last_sync = entry.synced_at;
-    saveState();
-    renderPending(tab);
-    updateLiveStock();
-    updateSyncChip('success');
-    toast('Synced ✓','success');
+    const r = await fetch(STATE.webhook_url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body: JSON.stringify(payload)
+    });
+    const txt = await r.text();
+    let json;
+    try { json = JSON.parse(txt); } catch(e) { json = { ok:false, error:'Invalid backend response: ' + txt.slice(0,120) }; }
+    if (json && json.ok) {
+      entry.status = 'synced';
+      entry.synced_at = new Date().toISOString();
+      entry.backend_response = json;
+      STATE.last_sync = entry.synced_at;
+      saveState();
+      renderPending(tab);
+      updateLiveStock();
+      updateSyncChip('success');
+      toast('Synced ✓ ' + (json.message || ''), 'success');
+    } else {
+      entry.status = 'failed';
+      entry.error = (json && json.error) || 'Unknown backend error';
+      entry.failed_at = new Date().toISOString();
+      saveState();
+      renderPending(tab);
+      updateSyncChip('error');
+      toast('⚠ Submit gagal: ' + entry.error, 'error', 6000);
+      throw new Error(entry.error);
+    }
   } catch(err){
-    entry.status = 'failed';
+    if (entry.status !== 'failed') {
+      entry.status = 'failed';
+      entry.error = err.message;
+      entry.failed_at = new Date().toISOString();
+    }
     saveState();
     renderPending(tab);
     updateSyncChip('error');
-    toast('Sync failed: ' + err.message, 'error');
+    if (!entry.error || !err.message.startsWith(entry.error)) {
+      toast('Sync error: ' + err.message, 'error', 6000);
+    }
   }
 }
 

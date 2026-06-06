@@ -218,7 +218,7 @@ footer a{color:var(--steel);text-decoration:none}
     <!-- 4 main KPI cards -->
     <div class="kpi-grid" style="grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px">
       <div class="kpi success" style="background:#DAEBE0;border:2px solid #5B9279">
-        <div class="label" style="color:#2D5640;font-weight:700">💼 Saldo Rekening BSI Bonsari</div>
+        <div class="label" style="color:#2D5640;font-weight:700">💼 Cash Liquid Operasional <span style="font-size:10px;background:#FFF3E0;color:#7A4A1F;padding:2px 6px;border-radius:6px;font-weight:600;text-transform:none;letter-spacing:0;margin-left:4px">excl. inventory</span></div>
         <div class="value" id="cp-saldo-rek" style="color:#2D5640;font-size:18px"><span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> —</div>
         <div class="sub">Cash Liquid (excl. stock)</div>
       </div>
@@ -254,14 +254,14 @@ footer a{color:var(--steel);text-decoration:none}
     <!-- Formula breakdown -->
     <div class="two-col" style="margin-bottom:18px">
       <div>
-        <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:var(--steel);font-weight:700;margin-bottom:10px">📐 Cara Hitung Saldo Rekening BSI Bonsari</h3>
+        <h3 style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:var(--steel);font-weight:700;margin-bottom:10px">📐 Cara Hitung Cash Liquid Operasional</h3>
         <table style="font-size:13px">
           <tbody>
             <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border)">+ Total Hasil Penjualan</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);font-family:monospace"><span style="font-size:10px;color:var(--muted)">Rp</span> <span id="brk-sales">79.246.000</span></td></tr>
             <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Pengeluaran Operasi (post-modal)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-peng-operasi">14.829.097</span></td></tr>
-            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Stok Tertahan (329 KG inventory)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-stok-tertahan">22.585.521</span></td></tr>
-            <tr style="background:#DAEBE0"><td style="padding:9px 10px;font-weight:700;color:#2D5640">= Saldo Rekening Expected</td><td class="num" style="padding:9px 10px;font-weight:700;color:#2D5640;font-family:monospace"><span style="font-size:11px">Rp</span> <span id="brk-saldo-rekening">41.831.382</span></td></tr>
-            <tr><td style="padding:7px 10px;font-size:11px;color:var(--muted);font-style:italic">↑ Ini yang harusnya match dengan saldo BSI sebelum loan</td><td></td></tr>
+            <tr><td style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger)">− Stok Tertahan (inventory GB)</td><td class="num" style="padding:8px 10px;border-bottom:1px solid var(--border);color:var(--danger);font-family:monospace"><span style="font-size:10px">Rp</span> <span id="brk-stok-tertahan">22.585.521</span></td></tr>
+            <tr style="background:#DAEBE0"><td style="padding:9px 10px;font-weight:700;color:#2D5640">= Cash Liquid Operasional</td><td class="num" style="padding:9px 10px;font-weight:700;color:#2D5640;font-family:monospace"><span style="font-size:11px">Rp</span> <span id="brk-saldo-rekening">41.831.382</span></td></tr>
+            <tr><td style="padding:7px 10px;font-size:11px;color:var(--muted);font-style:italic">↑ Cash available untuk operasional (BUKAN saldo bank actual). Saldo bank = Cash Liquid + Modal Awal − inventory loss.</td><td></td></tr>
           </tbody>
         </table>
       </div>
@@ -1557,13 +1557,19 @@ function __recomputeKPIs() {
 
   // === Cross-component sync ===
   const MODAL_AWAL = 77750000;
-  const AVG_HPP_KG = 68649;
+  // V9.0 F6 — Per-grade HPP (locked April 2026 v2.1). Flat AVG_HPP_KG=68649 understated inventory ~2.7%.
+  const HPP_PER_GRADE = { GBO: 71700, GBP: 74341, GBC: 69968, GBL: 69968, GBS: 56849 };
+  const AVG_HPP_KG = 68649; // kept for backward compat; new code pakai HPP_PER_GRADE
   const DEPRESIASI_7BLN = 801680;
   const PAJAK_UMKM_RATE = 0.005;
   const pengeluaranOperasi = D.kpi.total_exp - MODAL_AWAL;
   // V7: stockKg = live computed from movements (single source of truth)
   const stockKg = totalGB;
-  const stockValue = stockKg * AVG_HPP_KG;
+  // V9.0 F6 — stockValue per-grade: Σ (kg × HPP_grade). RB/GC/Signature pakai fallback AVG.
+  let stockValue = 0;
+  for (const [g, kg] of Object.entries(stockByGrade)) {
+    stockValue += (kg || 0) * (HPP_PER_GRADE[g] || AVG_HPP_KG);
+  }
   // 1. Cash Position
   if (!D.cash_position) D.cash_position = {};
   D.cash_position.modal_awal = MODAL_AWAL;
@@ -3228,7 +3234,8 @@ sortTb.innerHTML = sortBatchesSorted.map(r=>{
 }).join('');
 // ============= AKUNTANSI =============
 const A = D.accounting;
-const cashPos = D.kpi.modal_awal + D.kpi.total_sales - D.kpi.total_exp;
+// V9.0 F7 P1.2 — Fix #acct-cash NaN. D.kpi.modal_awal tidak ada — pakai cash_position.modal_awal (set di L1569).
+const cashPos = (D.cash_position?.modal_awal || 77750000) + (D.kpi?.total_sales || 0) - (D.kpi?.total_exp || 0);
 const netProfit = A.pl.net_profit;
 const netWorth = A.neraca.total_aset - A.neraca.modal_awal;
 
@@ -3263,7 +3270,8 @@ const reclassMeta = {
 const reclassHtml = Object.entries(A.reclass_totals).map(([k,v])=>{
   const m = reclassMeta[k];
   if (!m) return ''; // defensive guard untuk bucket yang belum di-define
-  const pct = v/97857097*100;
+  // V9.0 F7 P1.3 — live total_exp (was hardcoded baseline 97857097 dari Apr 2026)
+  const pct = v/(D.kpi?.total_exp||97857097)*100;
   return `<div style="background:#FAFCFE;border:1px solid var(--border);border-left:4px solid ${m.color};border-radius:8px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:14px">
     <div style="font-size:22px">${m.icon}</div>
     <div style="flex:1;min-width:0">
@@ -3281,7 +3289,8 @@ document.getElementById('reclass-cards').innerHTML = reclassHtml;
 // Reclass chart - stacked bar showing breakdown
 new Chart(document.getElementById('ch-reclass'),{
   type:'bar',
-  data:{labels:['Pengeluaran Rp 97,86 jt'], datasets:Object.entries(A.reclass_totals).map(([k,v])=>({
+  // V9.0 F7 P1.3 — dynamic label (was hardcoded Apr 2026 baseline)
+  data:{labels:['Pengeluaran ' + (D.kpi?.total_exp ? 'Rp ' + (D.kpi.total_exp/1e6).toFixed(2) + ' jt' : 'Rp 97,86 jt')], datasets:Object.entries(A.reclass_totals).map(([k,v])=>({
     label: reclassMeta[k].label,
     data: [v],
     backgroundColor: reclassMeta[k].color,
@@ -3289,7 +3298,7 @@ new Chart(document.getElementById('ch-reclass'),{
   }))},
   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
     plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:10,font:{size:11}}},
-      tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.x)+' ('+(c.parsed.x/97857097*100).toFixed(1)+'%)'}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.x)+' ('+(c.parsed.x/(D.kpi?.total_exp||97857097)*100).toFixed(1)+'%)'}}},
     scales:{x:{stacked:true,ticks:{callback:v=>fmtK(v)},grid:{color:'#EDF2F7'}},y:{stacked:true,grid:{display:false}}}
   }
 });
@@ -3342,7 +3351,8 @@ document.getElementById('pl-table').innerHTML = plHtml;
   const stockKg = (D.logbook?.aggregates?.stock_now || 0).toFixed(0);
   const stockVal = D.cash_position?.stock_value || 0;
   const fixedNet = A.neraca?.fixed_asset_net || 0;
-  const monthsOperasi = 7;
+  // V9.0 F7 P2.4 — dynamic months: Bonsari operasi mulai Nov 2025 (per memory)
+  const monthsOperasi = Math.max(1, Math.floor((Date.now() - new Date('2025-11-01').getTime()) / (30.44 * 86400000)));
   const status = np > 0 ? 'untung' : 'rugi';
   const verb = np > 0 ? 'bukan rugi!' : '— periode ini perlu evaluasi';
   const txt = 'Bonsari Coffee <strong>'+status+' '+fmt(Math.abs(np))+'</strong> di periode '+monthsOperasi+' bulan operasi '+verb+' Saldo kas terlihat tipis hanya karena modal masih "tertahan" sebagai inventory GB ('+stockKg+' KG senilai '+fmt(stockVal)+') + aset tetap ('+fmt(fixedNet)+').<br><strong>Net margin '+margin+'%</strong> setelah deduct OpEx period dan depresiasi alat '+monthsOperasi+' bulan.';
@@ -3369,7 +3379,8 @@ function generateAccountingInsights(pl, dataObj, accountObj) {
   const margin = sales > 0 ? (np / sales * 100) : 0;
   const modal = 77750000;
   const bepPct = (np / modal * 100);
-  const monthsOperasi = 7;
+  // V9.0 F7 P2.4 — dynamic months (same formula as L3348)
+  const monthsOperasi = Math.max(1, Math.floor((Date.now() - new Date('2025-11-01').getTime()) / (30.44 * 86400000)));
   const annualROI = bepPct * 12 / monthsOperasi;
   const stockKg = dataObj.logbook?.aggregates?.stock_now || 0;
   const stockValue = dataObj.cash_position?.stock_value || 0;
