@@ -1443,6 +1443,20 @@ function mergeApiData(apiResponse) {
   if (typeof renderProduksiFull === 'function') {
     try { renderProduksiFull(); } catch(e) { console.warn('[V8.9] renderProduksiFull after merge failed:', e); }
   }
+  // V9.1 F4 — Re-render Overview/Akuntansi/Worker Payment after fresh merge
+  // Skip kalau user typing (preserve input focus + scroll position)
+  const __active = document.activeElement;
+  const __isTyping = __active && __active.matches && __active.matches('input,textarea,select');
+  if (!__isTyping) {
+    ['renderOverview','renderAkuntansi','renderWorkerPayment'].forEach(fnName => {
+      const fn = window[fnName];
+      if (typeof fn === 'function') {
+        try { fn(); } catch(e) { console.warn('[V9.1] ' + fnName + ' after merge failed:', e); }
+      }
+    });
+  } else {
+    console.log('[V9.1] User typing — defer render to avoid focus loss');
+  }
 }
 
 function __recomputeKPIs() {
@@ -1883,11 +1897,17 @@ async function silentRefreshFromAPI() {
     }
     if (sig !== __lastDataSignature) {
       const ts = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      console.log('[Bonsari Sync] ✓ Data change detected @ ' + ts + ' (silent — user manual refresh to apply)');
       __lastDataSignature = sig;
-      // V8.6b — ZERO interruption. NO toast, NO reload, NO prompt.
-      // Indicator dot is the only sign — Adib klik 🔄 kalau mau refresh.
-      // Indicator already updated above (status='ok' + lastSyncTime) — that's the only signal.
+      // V9.1 F5 — Apply silently via mergeApiData (semua named render functions auto-update in-place).
+      // mergeApiData internal guard already skip render kalau user typing (V9.1 F4 input-focus check).
+      // Sebelumnya V8.6b: zero interruption, gak panggil mergeApiData → polling sia-sia, user harus reload.
+      // Sekarang V9.1: silent merge + render. User dapat update real-time tanpa friction.
+      try {
+        mergeApiData(fresh);
+        console.log('[Bonsari Sync] ✓ Data change @ ' + ts + ' — applied in-place');
+      } catch(e) {
+        console.warn('[Bonsari Sync] mergeApiData failed during silent refresh:', e);
+      }
     }
   } catch (e) {
     if (typeof window !== 'undefined') { window.__syncStatus = 'err'; if (typeof __updateSyncIndicator==='function') __updateSyncIndicator(); }
@@ -2864,7 +2884,8 @@ document.addEventListener('click', (e) => {
   if (t) setTimeout(renderNotaTab, 100);
 });
 
-(function renderWorkerPayment(){
+// V9.1 F4-3 — Worker Payment: IIFE → named function for re-render on data merge
+function renderWorkerPayment(){
   const ws = D.worker_stats || {};
   const workers = Object.values(ws);
   if (workers.length === 0) return;
@@ -2928,7 +2949,8 @@ document.addEventListener('click', (e) => {
       </div>
     </div>`;
   }).join('');
-})();
+} // END renderWorkerPayment (V9.1 F4-3)
+renderWorkerPayment();
 
 // === Bayar Worker All — POST to Apps Script ===
 window.bayarWorkerAll = async function(pekerja, totalAmount) {
@@ -3232,8 +3254,12 @@ sortTb.innerHTML = sortBatchesSorted.map(r=>{
     <td class="num"><span style="color:var(--muted);font-size:10px">Rp</span> ${fmtN(r.ongkos||0,0)}</td>
   </tr>`;
 }).join('');
-// ============= AKUNTANSI =============
-const A = D.accounting;
+// ============= AKUNTANSI (V9.1 F4-2 — wrapped in named function for re-render on data merge) =============
+function renderAkuntansi(){
+  const A = D.accounting;
+  if (!A) return;
+  // V9.1 F4 — Destroy reclass chart instance before recreate (prevent canvas reuse error)
+  if (window.__reclassChart) { try { window.__reclassChart.destroy(); } catch(e){} }
 // V9.0 F7 P1.2 — Fix #acct-cash NaN. D.kpi.modal_awal tidak ada — pakai cash_position.modal_awal (set di L1569).
 const cashPos = (D.cash_position?.modal_awal || 77750000) + (D.kpi?.total_sales || 0) - (D.kpi?.total_exp || 0);
 const netProfit = A.pl.net_profit;
@@ -3286,8 +3312,8 @@ const reclassHtml = Object.entries(A.reclass_totals).map(([k,v])=>{
 }).join('');
 document.getElementById('reclass-cards').innerHTML = reclassHtml;
 
-// Reclass chart - stacked bar showing breakdown
-new Chart(document.getElementById('ch-reclass'),{
+// Reclass chart - stacked bar showing breakdown (V9.1 F4 — track instance for destroy-recreate)
+window.__reclassChart = new Chart(document.getElementById('ch-reclass'),{
   type:'bar',
   // V9.0 F7 P1.3 — dynamic label (was hardcoded Apr 2026 baseline)
   data:{labels:['Pengeluaran ' + (D.kpi?.total_exp ? 'Rp ' + (D.kpi.total_exp/1e6).toFixed(2) + ' jt' : 'Rp 97,86 jt')], datasets:Object.entries(A.reclass_totals).map(([k,v])=>({
@@ -3478,6 +3504,8 @@ document.getElementById('insight-cards').innerHTML = insights.map(i=>`
     <div style="font-size:12.5px;color:var(--text);line-height:1.6">${i.body}</div>
   </div>
 `).join('');
+} // END renderAkuntansi (V9.1 F4-2)
+renderAkuntansi();
 
 
 
@@ -3967,30 +3995,32 @@ renderMarginDistribution();
 
 
 
-// ============= CASH POSITION =============
-const CP = D.cash_position;
-
-document.getElementById('cp-saldo-rek').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.cash_liquid,0);
-document.getElementById('cp-sales').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.sales,0);
-document.getElementById('cp-pengeluaran').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.peng_riil,0);
-document.getElementById('cp-stock-tertahan').innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(CP.stock_value,0);
-// Update breakdown table spans
-const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtN(val, 0); };
-setText('brk-sales', CP.sales);
-setText('brk-peng-operasi', CP.peng_riil);
-setText('brk-stok-tertahan', CP.stock_value);
-setText('brk-saldo-rekening', CP.cash_liquid);
-setText('brk-total-sales', CP.sales);
-setText('brk-total-peng', CP.peng_total);
-setText('brk-saldo-formal', CP.saldo_formal);
-// Update sub-text "Per 5 Mei 2026 - STOCK 329 KG OPNAME-CONFIRMED" with live stock kg
-const cpHeader = document.querySelector('h2');
-// Update 'Stok Tertahan (329 KG inventory)' label dynamically
-document.querySelectorAll('td').forEach(td => {
-  if (td.textContent && td.textContent.includes('Stok Tertahan') && td.textContent.includes('inventory')) {
-    td.textContent = '− Stok Tertahan (' + Math.round(CP.stock_kg) + ' KG inventory)';
-  }
-});
+// ============= CASH POSITION (V9.1 F4-1 — wrapped in named function for re-render on data merge) =============
+function renderOverview(){
+  const CP = D.cash_position;
+  if (!CP) return;
+  const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(val,0); };
+  setHtml('cp-saldo-rek', CP.cash_liquid);
+  setHtml('cp-sales', CP.sales);
+  setHtml('cp-pengeluaran', CP.peng_riil);
+  setHtml('cp-stock-tertahan', CP.stock_value);
+  // Update breakdown table spans
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmtN(val, 0); };
+  setText('brk-sales', CP.sales);
+  setText('brk-peng-operasi', CP.peng_riil);
+  setText('brk-stok-tertahan', CP.stock_value);
+  setText('brk-saldo-rekening', CP.cash_liquid);
+  setText('brk-total-sales', CP.sales);
+  setText('brk-total-peng', CP.peng_total);
+  setText('brk-saldo-formal', CP.saldo_formal);
+  // Update 'Stok Tertahan' label with live stock kg
+  document.querySelectorAll('td').forEach(td => {
+    if (td.textContent && td.textContent.includes('Stok Tertahan') && td.textContent.includes('inventory')) {
+      td.textContent = '− Stok Tertahan (' + Math.round(CP.stock_kg) + ' KG inventory)';
+    }
+  });
+}
+renderOverview();
 
 // Owner Loan storage (localStorage isn't supported per CSP; use in-memory + manual export)
 let ownerLoans = [];
