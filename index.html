@@ -2270,6 +2270,56 @@ new Chart(document.getElementById('ch-cat'),{
   }
 });
 
+// V9.5 M8 — Hybrid customer dedup (Adib decision 7 Jun 2026)
+// Step 1: __customerAliases manual override untuk edge case (institutional suffix, typo, dll).
+// Step 2: Regex strip honorific (Mas/Mbak/Pak/Bu/Ibu) untuk pattern umum.
+// Adib edit __customerAliases di-bawah ini untuk tambah kasus edge.
+// Future: load dari Customer_Aliases sheet via backend handler.
+const __customerAliases = {
+  // 'raw nama lowercase': 'canonical nama'
+  // Contoh:
+  // 'errina psy umm': 'Errina Psy',  // UMM institutional suffix strip
+  // 'errina psy umm': 'Errina Psy UMM',  // OR jika dianggap entitas terpisah, biarkan
+  // 'lichyum roastery': 'Lycheum Roastery',  // typo correction
+};
+function normalizeCustomer(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const lower = s.toLowerCase();
+  // Step 1: manual override priority
+  if (__customerAliases.hasOwnProperty(lower)) return __customerAliases[lower];
+  // Step 2: regex strip honorific Mas/Mbak/Pak/Bu/Ibu
+  const stripped = s.replace(/^(Mas|Mbak|Pak|Bu|Ibu)\s+/i, '').trim();
+  return stripped || s;
+}
+function dedupCustomerList(list) {
+  if (!Array.isArray(list)) return list;
+  const map = new Map();
+  list.forEach(c => {
+    if (!c || !c.nama) return;
+    const canonical = normalizeCustomer(c.nama);
+    if (!canonical) return;
+    if (!map.has(canonical)) {
+      map.set(canonical, { nama: canonical, sales: 0, profit: 0, txn: 0, qty_gb: 0, qty_rb: 0 });
+    }
+    const acc = map.get(canonical);
+    acc.sales += (+c.sales) || 0;
+    acc.profit += (+c.profit) || 0;
+    acc.txn += (+c.txn) || 0;
+    acc.qty_gb += (+c.qty_gb) || 0;
+    acc.qty_rb += (+c.qty_rb) || 0;
+  });
+  return Array.from(map.values()).sort((a,b) => b.sales - a.sales);
+}
+// Apply dedup to PRELOAD top_customers (1-shot, before chart render)
+if (D.top_customers && D.top_customers.length > 0) {
+  const beforeCount = D.top_customers.length;
+  D.top_customers = dedupCustomerList(D.top_customers);
+  if (D.top_customers.length < beforeCount) {
+    console.log('[V9.5 M8] Customer dedup: ' + beforeCount + ' → ' + D.top_customers.length + ' canonical names');
+  }
+}
 // Top customers
 const topC = D.top_customers.slice(0,10);
 new Chart(document.getElementById('ch-cust'),{
