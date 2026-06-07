@@ -3079,17 +3079,27 @@ renderWorkerPayment();
 
 // === Bayar Worker All — POST to Apps Script ===
 window.bayarWorkerAll = async function(pekerja, totalAmount) {
-  if (!confirm('💸 Bayar semua ongkos outstanding untuk ' + pekerja + '?\n\nTotal: ' + fmt(totalAmount) + '\n\nTindakan ini akan mark semua batch unpaid sebagai PAID di Google Sheet.')) return;
+  if (!confirm('💸 Bayar semua ongkos outstanding untuk ' + pekerja + '?\n\nTotal: ' + fmt(totalAmount) + '\n\nTindakan ini akan mark semua batch unpaid sebagai PAID di Google Sheet + auto-create Pengeluaran kategori Sortir (ID PEN_SRT_*).')) return;
   const apiUrl = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
   try {
-    await fetch(apiUrl, {
+    // V9.5 M9 — Hapus mode:'no-cors' (sama pattern F2 V9.0). Parse response, alert kalau backend reject.
+    const r = await fetch(apiUrl, {
       method: 'POST',
-      mode: 'no-cors',
       headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify({ action: 'bulk_pay_worker', pekerja: pekerja })
     });
-    alert('✅ Pembayaran ' + pekerja + ' (' + fmt(totalAmount) + ') sudah di-record!\n\nDashboard akan refresh otomatis dalam 10 detik...');
-    setTimeout(__doSoftRefresh, 10000);
+    const txt = await r.text();
+    let json; try { json = JSON.parse(txt); } catch(e) { json = { ok: false, error: 'Invalid response: ' + txt.slice(0,100) }; }
+    if (json && json.ok) {
+      const msg = '✅ Pembayaran ' + pekerja + ' (' + fmt(totalAmount) + ') sudah di-record!\n' +
+                  (json.newly_paid ? '💰 ' + json.newly_paid + ' batch ke-mark PAID' : '') +
+                  (json.pengeluaran_ref_id ? '\n📒 Pengeluaran auto-create: ' + json.pengeluaran_ref_id : '') +
+                  '\n\nDashboard akan refresh otomatis dalam 10 detik...';
+      alert(msg);
+      setTimeout(__doSoftRefresh, 10000);
+    } else {
+      alert('⚠️ Bayar Semua gagal: ' + (json?.error || 'Unknown error'));
+    }
   } catch (e) {
     alert('⚠️ Error: ' + e.message);
   }
@@ -3305,14 +3315,23 @@ window.saveBatchChanges = async function(pekerja) {
   if (!confirm(confirmMsg)) return;
   const apiUrl = 'https://script.google.com/macros/s/AKfycbwtZCX3dJk0XSCm14JbVPe03IOzUpfQrk4_LLThF-VG2ZqOvqmYO_7UsYXKl0nTZsvz/exec';
   try {
-    await fetch(apiUrl, {
-      method: 'POST', mode: 'no-cors',
+    // V9.5 M9 — Hapus mode:'no-cors' (pattern F2). Parse response untuk verify backend success.
+    const r = await fetch(apiUrl, {
+      method: 'POST',
       headers: {'Content-Type': 'text/plain'},
       body: JSON.stringify({ action: 'update_payment', updates: updates, pekerja: pekerja })
     });
-    alert('✅ ' + updates.length + ' batch updated.' + (newlyPaid.length > 0 ? '\n💰 Pengeluaran Sortir auto-created (' + fmt(totalNewPay) + ').' : '') + '\n\nDashboard akan refresh otomatis...');
-    window.__pendingBatchChanges = {};
-    setTimeout(__doSoftRefresh, 8000);
+    const txt = await r.text();
+    let json; try { json = JSON.parse(txt); } catch(e) { json = { ok: false, error: 'Invalid response: ' + txt.slice(0,100) }; }
+    if (json && json.ok) {
+      alert('✅ ' + updates.length + ' batch updated.' +
+            (newlyPaid.length > 0 ? '\n💰 Pengeluaran Sortir auto-create: ' + (json.pengeluaran_ref_id || '(unknown ID)') + ' total ' + fmt(totalNewPay) : '') +
+            '\n\nDashboard akan refresh otomatis...');
+      window.__pendingBatchChanges = {};
+      setTimeout(__doSoftRefresh, 8000);
+    } else {
+      alert('⚠️ Update payment gagal: ' + (json?.error || 'Unknown error'));
+    }
   } catch (e) {
     alert('⚠️ Error: ' + e.message);
   }
