@@ -212,7 +212,7 @@ footer a{color:var(--steel);text-decoration:none}
 
   <!-- CASH POSITION & VERIFIKASI Section -->
   <div class="section">
-    <h2>💰 Cash Position & Verifikasi <span class="badge">Per 5 Mei 2026 · Stock 329 KG opname-confirmed</span></h2>
+    <h2>💰 Cash Position & Verifikasi <span class="badge" id="cp-stock-badge">memuat…</span></h2>
     <div class="note"><strong>Tujuan:</strong> Tahu berapa cash yang HARUSNYA ada di rekening, plus tracking owner loan kalau ada cash dipakai di luar Bonsari Coffee. Update field "Saldo Actual" untuk reconcile dengan mutasi rekening.</div>
     
     <!-- 4 main KPI cards -->
@@ -347,7 +347,7 @@ footer a{color:var(--steel);text-decoration:none}
   </div>
 
   <div class="section">
-    <h2>💸 Pengeluaran per Kategori <span class="badge">Total Rp 97,86 jt</span></h2>
+    <h2>💸 Pengeluaran per Kategori <span class="badge" id="exp-total-badge">memuat…</span></h2>
     <div class="container" style="position:relative;height:200px"><canvas id="ch-exp"></canvas></div>
   </div>
 </div>
@@ -1622,16 +1622,15 @@ function __recomputeKPIs() {
       gbDiPekerjaTotal += qty;
     }
   });
-  // Fallback: if no movements yet (initial render), use baseline values
+  // V9.4 M7 — Loading marker (was confident baseline Apr 2026 yang stale >1 bulan).
+  // Risk lama: API gagal + cache kosong → dashboard tampil GBO 184.50 KG confident padahal data tidak ada.
+  // Sekarang: flag stock_load_error → UI tampil "—" + banner warning.
   if (movements.length === 0) {
-    stockByGrade.GBO = 184.50; // 169.50 di_tempat + 15 di_pekerja
-    stockByGrade.GBP = 37.44;
-    stockByGrade.GBC = 7.41;
-    stockByGrade.GBL = 47.69;
-    stockByGrade.GBS = 28.84;
-    totalGB = 305.88; // total baseline (excluding RB Form)
-    gbDiPekerjaTotal = 15.00;
-    gbDiPekerjaPerWorker['Unknown'] = 15.00;
+    if (!D.meta) D.meta = {};
+    D.meta.stock_load_error = true;
+    // stockByGrade stays at 0 untuk semua grade — UI render "—" via fmt fallback
+  } else {
+    if (D.meta) D.meta.stock_load_error = false;
   }
   D.stock_per_grade_live = stockByGrade;
   D.stock_per_grade_loc = stockByGradeLoc;
@@ -2432,6 +2431,12 @@ new Chart(document.getElementById('ch-exp-pie'),{
 const tipeColors = {'Persediaan':'#3A6EA5','Aset Tetap':'#5B89BF','HPP-Component':'#E8975A','OpEx Period':'#C99B47','Out of Scope':'#888780','Appropriation of Profit':'#2D5640'};
 const tipeBg = {'Persediaan':'#E0EBF5','Aset Tetap':'#D6E2F0','HPP-Component':'#FCE5D2','OpEx Period':'#FAEEDA','Out of Scope':'#F1EFE8','Appropriation of Profit':'#E8F4ED'};
 function renderExp(){
+  // V9.4 M5 — Dynamic badge "Total Rp [live]" (was hardcoded "Total Rp 97,86 jt")
+  const expBadge = document.getElementById('exp-total-badge');
+  if (expBadge) {
+    const totalExp = (D.kpi && D.kpi.total_exp) || 0;
+    expBadge.textContent = 'Total ' + fmt(totalExp);
+  }
   const search = document.getElementById('exp-search').value.toLowerCase();
   const cat = document.getElementById('exp-cat').value;
   const tipe = document.getElementById('exp-tipe').value;
@@ -3367,7 +3372,7 @@ const reclassHtml = Object.entries(A.reclass_totals).map(([k,v])=>{
   const m = reclassMeta[k];
   if (!m) return ''; // defensive guard untuk bucket yang belum di-define
   // V9.0 F7 P1.3 — live total_exp (was hardcoded baseline 97857097 dari Apr 2026)
-  const pct = v/(D.kpi?.total_exp||97857097)*100;
+  const pct = v/(D.kpi?.total_exp||1)*100;
   return `<div style="background:#FAFCFE;border:1px solid var(--border);border-left:4px solid ${m.color};border-radius:8px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:14px">
     <div style="font-size:22px">${m.icon}</div>
     <div style="flex:1;min-width:0">
@@ -3394,7 +3399,7 @@ window.__reclassChart = new Chart(document.getElementById('ch-reclass'),{
   }))},
   options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
     plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:10,font:{size:11}}},
-      tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.x)+' ('+(c.parsed.x/(D.kpi?.total_exp||97857097)*100).toFixed(1)+'%)'}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.x)+' ('+(c.parsed.x/(D.kpi?.total_exp||1)*100).toFixed(1)+'%)'}}},
     scales:{x:{stacked:true,ticks:{callback:v=>fmtK(v)},grid:{color:'#EDF2F7'}},y:{stacked:true,grid:{display:false}}}
   }
 });
@@ -4069,6 +4074,26 @@ renderMarginDistribution();
 function renderOverview(){
   const CP = D.cash_position;
   if (!CP) return;
+  // V9.4 M7 — Banner warning kalau stock data gagal di-load (was: silent fallback to baseline Apr 2026)
+  const stockErrEl = document.getElementById('cp-stock-load-error');
+  const hasErr = D.meta && D.meta.stock_load_error;
+  if (hasErr && !stockErrEl) {
+    const banner = document.createElement('div');
+    banner.id = 'cp-stock-load-error';
+    banner.style.cssText = 'background:#FFF3E0;border-left:3px solid #E8975A;padding:10px 14px;font-size:12px;color:#7A4A1F;margin:10px 0;border-radius:4px;font-weight:600';
+    banner.innerHTML = '⚠ Data stock belum berhasil dimuat — periksa koneksi atau klik 🔄 sync. Angka di bawah ini sementara TIDAK akurat.';
+    const h2 = document.querySelector('h2');
+    if (h2 && h2.parentNode) h2.parentNode.insertBefore(banner, h2.nextSibling);
+  } else if (!hasErr && stockErrEl) {
+    stockErrEl.remove();
+  }
+  // V9.4 M4 — Dynamic badge "Per [today] · Stock [X] KG · live" (was hardcoded "Per 5 Mei 2026 · 329 KG opname-confirmed")
+  const cpBadge = document.getElementById('cp-stock-badge');
+  if (cpBadge) {
+    const stockKg = (D.summary && D.summary.total_gb_kg) || CP.stock_kg || 0;
+    const asOfDate = __formatIdnDate(new Date().toISOString().slice(0,10));
+    cpBadge.textContent = 'Per ' + asOfDate + ' · Stock ' + fmtN(stockKg, 3) + ' KG · live';
+  }
   const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(val,0); };
   setHtml('cp-saldo-rek', CP.cash_liquid);
   setHtml('cp-sales', CP.sales);
