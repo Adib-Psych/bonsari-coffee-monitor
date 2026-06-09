@@ -1764,15 +1764,18 @@ function __recomputeKPIs() {
   if (kontribusiWakaf > 0) {
     D.pengeluaran.push({
       no: D.pengeluaran.length + 1,
-      tanggal: new Date().toISOString().slice(0,10),
-      tanggal_raw: 'Komitmen YTD',
+      // V9.8 A.1.3 — Lock tanggal ke 2026-05-22 (commitment locked date,
+      // bridge memory project_bonsari_mawrid_value_bridge.md) supaya tidak
+      // selalu sort ke atas tabel Pengeluaran (sebelumnya pakai today date).
+      tanggal: '2026-05-22',
+      tanggal_raw: 'Komitmen YTD · Locked 22 Mei 2026',
       deskripsi: '🌱 Kontribusi Wakaf Kebun Ngantang — sisa komitmen 1/3 Net Profit (One Cup, 3 Impacts)',
       kategori: 'Kontribusi Sosial',
       tipe_akuntansi: 'Appropriation of Profit',
       total: kontribusiWakaf,
       sumber: 'Bonsari Coffee · Self-Allocation',
       scope: 'social',
-      catatan: 'Komitmen 1/3 Net Profit untuk sosial, pendidikan, kemaslahatan umat. Beneficiary saat ini: Kebun Wakaf Ngantang (bridge period sebelum Mawrid Foundation formal). Breakdown indikatif: subsidi operasional kebun + premium pricing differential + jasa processing. Audit trail: panel "Kontribusi Sosial" di atas tabel.',
+      catatan: 'Komitmen 1/3 Net Profit untuk sosial, pendidikan, kemaslahatan umat. Beneficiary saat ini: Kebun Wakaf Ngantang (bridge period sebelum Mawrid Foundation formal). Locked 22 Mei 2026 — komitmen perpetual sampai Mawrid Foundation formal. Audit trail: panel "Kontribusi Sosial" di atas tabel.',
       _src: 'auto_kontribusi_wakaf'
     });
     // Update aggregates — propagate ke total_exp, cash position, neraca
@@ -2069,15 +2072,16 @@ if (window.__bonsariCachedData) {
   if (remaining > 0) {
     D.pengeluaran.push({
       no: D.pengeluaran.length + 1,
-      tanggal: new Date().toISOString().slice(0,10),
-      tanggal_raw: 'Komitmen YTD',
+      // V9.8 A.1.3 — Lock tanggal ke 2026-05-22 (commitment locked date)
+      tanggal: '2026-05-22',
+      tanggal_raw: 'Komitmen YTD · Locked 22 Mei 2026',
       deskripsi: '🌱 Kontribusi Wakaf Kebun Ngantang — sisa komitmen 1/3 Net Profit (One Cup, 3 Impacts)',
       kategori: 'Kontribusi Sosial',
       tipe_akuntansi: 'Appropriation of Profit',
       total: remaining,
       sumber: 'Bonsari Coffee · Self-Allocation',
       scope: 'social',
-      catatan: 'Komitmen 1/3 Net Profit untuk sosial, pendidikan, kemaslahatan umat. Beneficiary: Kebun Wakaf Ngantang (bridge period sebelum Mawrid Foundation formal). Breakdown indikatif di panel "Kontribusi Sosial" atas tabel ini.',
+      catatan: 'Komitmen 1/3 Net Profit untuk sosial, pendidikan, kemaslahatan umat. Beneficiary: Kebun Wakaf Ngantang (bridge period sebelum Mawrid Foundation formal). Locked 22 Mei 2026 — komitmen perpetual sampai Mawrid Foundation formal.',
       _src: 'auto_kontribusi_wakaf'
     });
     // Propagate ke aggregates
