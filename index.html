@@ -350,6 +350,29 @@ footer a{color:var(--steel);text-decoration:none}
     <h2>💸 Pengeluaran per Kategori <span class="badge" id="exp-total-badge">memuat…</span></h2>
     <div class="container" style="position:relative;height:200px"><canvas id="ch-exp"></canvas></div>
   </div>
+
+  <!-- ╔════════════════════════════════════════════════════════════╗ -->
+  <!-- ║  IDENTITY RECONCILIATION  (V9.8 Stabilization Sprint A.1)  ║ -->
+  <!-- ║  Read-only panel: flag merah otomatis kalau drift           ║ -->
+  <!-- ╚════════════════════════════════════════════════════════════╝ -->
+  <div class="section" id="reconciliation-panel">
+    <h2>🔍 Identity Reconciliation <span class="badge" id="reco-summary">memuat…</span></h2>
+    <div class="note"><strong>Tujuan:</strong> Otomatis flag merah kalau identity formula tidak match — scan 10 detik tanpa cek angka manual. Toleransi: Rp ≤ Rp 1 · KG ≤ 0,001. <strong>🔒 LOCKED</strong> = drift historis yang sudah diketahui (audit trail).</div>
+    <div style="background:#FAFCFE;border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;overflow-x:auto">
+      <table style="width:100%;font-size:13px" id="reco-table">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Identity Check</th>
+            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Sisi A</th>
+            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Sisi B</th>
+            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Selisih</th>
+            <th style="padding:8px 10px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Status</th>
+          </tr>
+        </thead>
+        <tbody id="reco-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- PENJUALAN GB PANE -->
@@ -1515,7 +1538,8 @@ function mergeApiData(apiResponse) {
       'renderRB',               // V9.2 — Penjualan RB tab tables + KPIs
       'renderExp',              // V9.2 — Pengeluaran tab tables + KPIs
       'renderHppPackMatrix',    // V9.2 — HPP Reference matrix
-      'renderMarginDistribution' // V9.2 — Akuntansi margin distribution viz
+      'renderMarginDistribution', // V9.2 — Akuntansi margin distribution viz
+      '__renderReconciliation'  // V9.8 A.1 — Identity Reconciliation panel (4 checks)
       // NOTE: renderNotaTab skipped — async, has own filter handlers
       // NOTE: renderLogBookFull + renderProduksiFull already called above (V8.7 + V8.9)
     ].forEach(fnName => {
@@ -4185,6 +4209,131 @@ function renderOverview(){
   });
 }
 renderOverview();
+
+// ═══════════════════════════════════════════════════════════════
+// V9.8 STABILIZATION SPRINT A.1 — IDENTITY RECONCILIATION PANEL
+// ═══════════════════════════════════════════════════════════════
+// Read-only panel. 4 identity checks otomatis di-flag merah kalau drift.
+// M13 locked diff Rp 41.460 — Adib decision 9 Jun 2026: buang kelebihan
+// (sortasi sheet duplicate), in-progress B.2 reset paid_flag. Sampai B.2
+// selesai, ditampilkan sebagai 🔒 LOCKED bukan 🔴 DRIFT supaya tidak
+// stress check angka merah yang sebenarnya phantom.
+function __renderReconciliation() {
+  const tbody = document.getElementById('reco-tbody');
+  const summary = document.getElementById('reco-summary');
+  if (!tbody) return;
+
+  const fmtRp = (n) => '<span style="font-size:10px;color:var(--muted)">Rp</span> ' + fmtN(Math.round(n||0), 0);
+  const fmtKgD = (n) => fmtN(n||0, 3) + ' KG';
+
+  // ① Σ Sortir Paid (Sortasi sheet) vs Pengeluaran kategori Sortir
+  const sortirPaid = (D.sortasi || []).filter(s =>
+    String(s.ongkos_paid || '').toUpperCase() === 'YES' ||
+    String(s.ongkos_paid || '').toUpperCase() === 'TRUE'
+  ).reduce((sum, s) => sum + (+s.ongkos || 0), 0);
+  const pengSortir = (D.pengeluaran || []).filter(e =>
+    /sortir/i.test(e.kategori || '')
+  ).reduce((sum, e) => sum + (+e.total || 0), 0);
+
+  // ② Σ Sales − Σ HPP vs Gross Profit
+  const sumSales = D.kpi ? (+D.kpi.total_sales || 0) : 0;
+  const sumHpp = (D.accounting && D.accounting.pl) ? (+D.accounting.pl.hpp || 0) : 0;
+  const grossExpected = sumSales - sumHpp;
+  const grossDisplayed = (D.accounting && D.accounting.pl) ? (+D.accounting.pl.gross_profit || 0) : 0;
+
+  // ③ Modal + Sales − Total Pengeluaran vs Saldo Formal
+  const MODAL = 77750000;
+  const totalExp = D.kpi ? (+D.kpi.total_exp || 0) : 0;
+  const saldoExpected = MODAL + sumSales - totalExp;
+  const saldoDisplayed = (D.cash_position) ? (+D.cash_position.saldo_formal || 0) : 0;
+
+  // ④ Σ qty_signed (excl rb_form) vs Stock Total Live
+  const sumMovements = (D.gb_movements || []).filter(m =>
+    String(m.lokasi || '') !== 'rb_form'
+  ).reduce((sum, m) => sum + (+m.qty_signed || 0), 0);
+  const stockTotal = (+D.stock_total_live || 0);
+
+  const TOL_RP = 1;        // Rp 1 tolerance for rounding
+  const TOL_KG = 0.001;
+  const M13_LOCKED_DIFF = 41460; // Adib decision 9 Jun B.2 in-progress
+
+  const rows = [
+    {
+      name: '① Sortir Paid vs Pengeluaran Sortir',
+      a: sortirPaid, b: pengSortir,
+      fmt: fmtRp, tol: TOL_RP,
+      lockedDiff: M13_LOCKED_DIFF,
+      lockedNote: 'M13: kelebihan Rp 41.460 di Sortasi = duplicate. Reset paid_flag in-progress (B.2)'
+    },
+    {
+      name: '② Sales − HPP vs Gross Profit',
+      a: grossExpected, b: grossDisplayed,
+      fmt: fmtRp, tol: TOL_RP
+    },
+    {
+      name: '③ Modal + Sales − Peng vs Saldo Formal',
+      a: saldoExpected, b: saldoDisplayed,
+      fmt: fmtRp, tol: TOL_RP
+    },
+    {
+      name: '④ Σ Movements vs Stock Live',
+      a: sumMovements, b: stockTotal,
+      fmt: fmtKgD, tol: TOL_KG
+    }
+  ];
+
+  let driftCount = 0;
+  let lockedCount = 0;
+  tbody.innerHTML = rows.map(r => {
+    const diff = (r.a || 0) - (r.b || 0);
+    const absDiff = Math.abs(diff);
+    let status, statusColor, statusBg, rowBg;
+    if (absDiff <= r.tol) {
+      status = '✅ MATCH';
+      statusColor = '#2D5640';
+      statusBg = '#DAEBE0';
+      rowBg = '#FFFFFF';
+    } else if (r.lockedDiff && Math.abs(absDiff - r.lockedDiff) <= r.tol) {
+      status = '🔒 LOCKED';
+      statusColor = '#6B6660';
+      statusBg = '#EDEAE4';
+      rowBg = '#FAFAF7';
+      lockedCount++;
+    } else {
+      status = '🔴 DRIFT';
+      statusColor = '#7A2A2A';
+      statusBg = '#FCEBEB';
+      rowBg = '#FFF8F8';
+      driftCount++;
+    }
+    const diffSign = (diff > 0 && absDiff > r.tol) ? '+' : '';
+    const noteLine = r.lockedNote ? '<div style="font-size:10.5px;color:var(--muted);font-style:italic;margin-top:3px;font-weight:400">' + r.lockedNote + '</div>' : '';
+    return '<tr style="background:' + rowBg + ';border-bottom:1px solid var(--border)">' +
+      '<td style="padding:9px 10px;font-weight:600">' + r.name + noteLine + '</td>' +
+      '<td class="num" style="padding:9px 10px;font-family:monospace">' + r.fmt(r.a) + '</td>' +
+      '<td class="num" style="padding:9px 10px;font-family:monospace">' + r.fmt(r.b) + '</td>' +
+      '<td class="num" style="padding:9px 10px;font-family:monospace;color:' + (absDiff <= r.tol ? 'var(--muted)' : statusColor) + ';font-weight:' + (absDiff <= r.tol ? '400' : '700') + '">' + diffSign + r.fmt(diff) + '</td>' +
+      '<td style="padding:9px 10px;text-align:center"><span style="background:' + statusBg + ';color:' + statusColor + ';padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">' + status + '</span></td>' +
+      '</tr>';
+  }).join('');
+
+  if (summary) {
+    if (driftCount === 0 && lockedCount === 0) {
+      summary.textContent = '✅ All match';
+      summary.style.background = '#DAEBE0';
+      summary.style.color = '#2D5640';
+    } else if (driftCount === 0) {
+      summary.textContent = '🔒 ' + lockedCount + ' locked';
+      summary.style.background = '#EDEAE4';
+      summary.style.color = '#6B6660';
+    } else {
+      summary.textContent = '🔴 ' + driftCount + ' drift';
+      summary.style.background = '#FCEBEB';
+      summary.style.color = '#7A2A2A';
+    }
+  }
+}
+__renderReconciliation();
 
 // Owner Loan storage (localStorage isn't supported per CSP; use in-memory + manual export)
 let ownerLoans = [];
