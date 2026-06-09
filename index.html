@@ -3203,6 +3203,8 @@ function renderWorkerPayment(){
         ${w.outstanding > 0 ? `<button onclick="bayarWorkerAll('${w.pekerja.replace(/'/g, '&apos;')}', ${w.outstanding})" style="background:#3A6EA5;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">💸 Bayar Semua (${fmt(w.outstanding)})</button>` : '<div style="text-align:center;padding:6px;font-size:11px;color:#5B9279;font-weight:600">✅ Semua batch sudah dibayar</div>'}
         <button onclick="openBatchDetail('${w.pekerja.replace(/'/g, '&apos;')}')" style="background:#fff;color:#3A6EA5;border:1px solid #3A6EA5;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">📋 Detail Batch</button>
       </div>
+      <!-- V9.8 A.1.13 — Rekap Status Sortasi Green Bean (modal selector) -->
+      <button onclick="openRekapSelector('${w.pekerja.replace(/'/g, '&apos;')}')" style="width:100%;background:#fff;color:#1B2A41;border:1px solid #3A6EA5;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer;margin-bottom:6px">📊 Rekap Status Sortasi GB</button>
       <!-- V9.8 A.1.12 — Bukti Bayar generator -->
       ${w.paid_batch > 0 ? `<button onclick="generateBuktiBayar('${w.pekerja.replace(/'/g, '&apos;')}')" style="width:100%;background:#fff;color:#5B9279;border:1px solid #5B9279;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer">💾 Generate Bukti Bayar (PDF)</button>` : ''}
     </div>`;
@@ -3268,8 +3270,11 @@ window.generateBuktiBayar = function(pekerja) {
       '@media print{.print-btn{display:none}body{background:#fff;max-width:none;padding:0;margin:0}}' +
     '</style></head><body>' +
     '<button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
-    '<div class="logo">🌱</div>' +
-    '<h1>BONSARI COFFEE<span class="subtitle">Bukti Pembayaran Ongkos Sortir</span></h1>' +
+    '<div style="display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;border-bottom:2.5px solid #5B9279;padding-bottom:14px;margin-bottom:22px">' +
+      '<img src="' + __LOGO_BONSARI_URL + '" alt="Bonsari Coffee" style="max-height:72px;max-width:140px;object-fit:contain" onerror="this.style.display=\'none\'" />' +
+      '<h1 style="margin:0;color:#1B2A41;text-align:center;border:none;padding:0;font-size:20px;line-height:1.3">BUKTI PEMBAYARAN ONGKOS SORTIR<span class="subtitle">Bonsari Coffee · Kebun Wakaf Produktif Kopi Ngantang</span></h1>' +
+      '<img src="' + __LOGO_WAKAF_URL + '" alt="Wakaf Produktif Ngantang" style="max-height:72px;max-width:140px;object-fit:contain" onerror="this.style.display=\'none\'" />' +
+    '</div>' +
     '<div class="header-meta">' +
       '<div>' +
         '<div><strong>Penerima</strong>' + pekerja + '</div>' +
@@ -3329,6 +3334,321 @@ window.generateBuktiBayar = function(pekerja) {
   win.document.open();
   win.document.write(html);
   win.document.close();
+};
+
+// ═══════════════════════════════════════════════════════════════
+// V9.8 A.1.13 — REKAP STATUS SORTASI GREEN BEAN
+// ═══════════════════════════════════════════════════════════════
+// Per Adib spec 10 Jun 2026: Beda dari Bukti Bayar (= bukti pembayaran sudah jadi).
+// Rekap Status = laporan saldo pekerja sampai tanggal X. Use case: pekerja tanya
+// "udah dapat brp ya pak?", lalu putuskan ambil sekarang atau tunggu ngumpul.
+//
+// Flow:
+//   1. Klik "📊 Rekap Status" → modal selector terbuka
+//   2. Default checked: unpaid + in-progress (yang pekerja peduli)
+//   3. Adib bisa filter cepat: Pilih Semua / Belum Bayar / Pending / Historikal
+//   4. Adib bisa individual check/uncheck row
+//   5. Klik "📄 Generate Rekap" → window baru dengan Statement printable
+//
+// Receipt header: Logo Bonsari kiri · Title center · Logo Wakaf kanan
+const __LOGO_BONSARI_URL = 'https://adib-psych.github.io/bonsari-coffee-monitor/assets/logo_bonsari.png';
+const __LOGO_WAKAF_URL = 'https://adib-psych.github.io/bonsari-coffee-monitor/assets/logo_wakaf.png';
+
+window.openRekapSelector = function(pekerja) {
+  const sortasiBatches = (window.__bonsariCachedData?.data?.sortasi || D.sortasi_batches || []);
+  const batches = sortasiBatches.filter(s => {
+    let w = (s.pekerja || '').toString().trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return w === pekerja;
+  });
+  if (batches.length === 0) { alert('Tidak ada batch untuk ' + pekerja); return; }
+
+  // Sort batches by tgl_ambil desc (newest first)
+  batches.sort((a,b) => (b.tgl_ambil||'').localeCompare(a.tgl_ambil||''));
+
+  // Default selection: unpaid + in-progress (yang pekerja biasanya peduli)
+  window.__rekapSelected = window.__rekapSelected || new Set();
+  window.__rekapSelected.clear();
+  batches.forEach(b => {
+    const isPaid = (b.ongkos_paid||'').toString().toUpperCase() === 'YES';
+    const status = (b.batch_status||'').toString().toLowerCase().trim();
+    const isInProgress = status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+    if (!isPaid || isInProgress) window.__rekapSelected.add(b.id);
+  });
+  window.__rekapBatchesCache = batches;
+  window.__rekapPekerja = pekerja;
+
+  // Build modal
+  let modal = document.getElementById('rekap-selector-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'rekap-selector-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:1100px;width:100%;max-height:92vh;overflow:auto;padding:22px;position:relative">' +
+    '<button onclick="document.getElementById(\'rekap-selector-modal\').remove()" style="position:absolute;top:12px;right:12px;background:#888;color:#fff;border:none;border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:14px">×</button>' +
+    '<h2 style="margin-top:0;color:#1B2A41">📊 Pilih Batch untuk Rekap Status — ' + pekerja + '</h2>' +
+    '<div class="note" style="background:#FAFCFE;border-left:3px solid #5B9279;padding:10px 14px;margin-bottom:14px;font-size:12px;border-radius:4px">Default: <strong>Belum Bayar + Pending</strong> ter-pilih (yang pekerja biasanya tanya). Pak Adib bisa override pilihan via filter cepat atau check/uncheck individual row.</div>' +
+    '<!-- Filter Quick Buttons -->' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">' +
+      '<span style="font-size:11.5px;color:var(--muted);font-weight:600;margin-right:4px">Filter cepat:</span>' +
+      '<button onclick="rekapFilter(\'all\')" style="background:#fff;color:#3A6EA5;border:1px solid #3A6EA5;border-radius:5px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-weight:600">☑ Pilih Semua</button>' +
+      '<button onclick="rekapFilter(\'unpaid\')" style="background:#fff;color:#B85C5C;border:1px solid #B85C5C;border-radius:5px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-weight:600">⏳ Belum Bayar</button>' +
+      '<button onclick="rekapFilter(\'pending\')" style="background:#fff;color:#E89F4D;border:1px solid #E89F4D;border-radius:5px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-weight:600">🟡 Pending</button>' +
+      '<button onclick="rekapFilter(\'paid\')" style="background:#fff;color:#5B9279;border:1px solid #5B9279;border-radius:5px;padding:6px 12px;font-size:11.5px;cursor:pointer;font-weight:600">✅ Historikal Paid</button>' +
+      '<button onclick="rekapFilter(\'none\')" style="background:#fff;color:var(--muted);border:1px solid #ccc;border-radius:5px;padding:6px 12px;font-size:11.5px;cursor:pointer">Kosongkan</button>' +
+    '</div>' +
+    '<!-- Table wrapper -->' +
+    '<div id="rekap-selector-table" style="overflow:auto;max-height:55vh;border:1px solid var(--border);border-radius:6px"></div>' +
+    '<!-- Footer counter + action -->' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:12px 14px;background:#FAFCFE;border-radius:6px;border:1px solid var(--border)">' +
+      '<div id="rekap-selector-counter" style="font-size:13px;color:#1B2A41"></div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button onclick="document.getElementById(\'rekap-selector-modal\').remove()" style="background:#fff;color:var(--muted);border:1px solid #ccc;border-radius:6px;padding:8px 14px;font-size:12px;cursor:pointer">Cancel</button>' +
+        '<button onclick="generateRekapStatus()" style="background:#5B9279;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer">📄 Generate Rekap →</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  renderRekapSelectorTable();
+};
+
+window.renderRekapSelectorTable = function() {
+  const batches = window.__rekapBatchesCache || [];
+  const wrap = document.getElementById('rekap-selector-table');
+  if (!wrap) return;
+  let html = '<table style="width:100%;font-size:11.5px;border-collapse:collapse">' +
+    '<thead><tr style="background:#1B2A41;color:#fff;position:sticky;top:0">' +
+      '<th style="padding:8px;text-align:center">☑</th>' +
+      '<th style="padding:8px;text-align:left">No</th>' +
+      '<th style="padding:8px;text-align:left">Tgl Ambil</th>' +
+      '<th style="padding:8px;text-align:left">Tgl Setor</th>' +
+      '<th style="padding:8px;text-align:left">Bakalan</th>' +
+      '<th style="padding:8px;text-align:right">Setor (KG)</th>' +
+      '<th style="padding:8px;text-align:right">Billable (KG)</th>' +
+      '<th style="padding:8px;text-align:right">Ongkos (Rp)</th>' +
+      '<th style="padding:8px;text-align:center">Status</th>' +
+    '</tr></thead><tbody>';
+  batches.forEach((b,i) => {
+    const isPaid = (b.ongkos_paid||'').toString().toUpperCase() === 'YES';
+    const status = (b.batch_status||'').toString().toLowerCase().trim();
+    const isInProgress = status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+    const billable = Math.max(0, (+b.total_setor||0) - (+b.gbs||0));
+    const ongkos = +b.ongkos || (billable * 3000);
+    const checked = window.__rekapSelected.has(b.id) ? 'checked' : '';
+    const bid = String(b.id||'').replace(/'/g, '&apos;');
+    let badge;
+    if (isInProgress) badge = '<span style="background:#F1EFE8;color:#6B6660;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">🟡 Pending</span>';
+    else if (isPaid) badge = '<span style="background:#DAEBE0;color:#2D5640;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">✅ Paid</span>';
+    else badge = '<span style="background:#FCE5D2;color:#7A4A1F;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600">⏳ Belum Bayar</span>';
+    html += '<tr style="border-bottom:1px solid #EDF2F7;background:' + (checked ? '#F0F7F4' : '#fff') + '">' +
+      '<td style="padding:6px 8px;text-align:center"><input type="checkbox" ' + checked + ' onchange="toggleRekapBatch(\'' + bid + '\')" style="width:16px;height:16px;cursor:pointer" /></td>' +
+      '<td style="padding:6px 8px">' + (i+1) + '</td>' +
+      '<td style="padding:6px 8px">' + (__formatIdnDate(b.tgl_ambil) || b.tgl_ambil || '—') + '</td>' +
+      '<td style="padding:6px 8px">' + (__formatIdnDate(b.tgl_setor) || b.tgl_setor || '—') + '</td>' +
+      '<td style="padding:6px 8px">' + (b.bakalan || '—') + '</td>' +
+      '<td style="padding:6px 8px;text-align:right">' + (b.total_setor ? fmtN(+b.total_setor, 2) : '—') + '</td>' +
+      '<td style="padding:6px 8px;text-align:right;font-weight:600">' + (billable > 0 ? fmtN(billable, 2) : '—') + '</td>' +
+      '<td style="padding:6px 8px;text-align:right;font-family:monospace">' + (ongkos > 0 ? fmtN(ongkos, 0) : '—') + '</td>' +
+      '<td style="padding:6px 8px;text-align:center">' + badge + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  // Update counter
+  const selected = batches.filter(b => window.__rekapSelected.has(b.id));
+  const totalOngkos = selected.reduce((s,b) => s + (+b.ongkos || (Math.max(0, (+b.total_setor||0) - (+b.gbs||0)) * 3000)), 0);
+  const totalBillable = selected.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  const counterEl = document.getElementById('rekap-selector-counter');
+  if (counterEl) counterEl.innerHTML = '<strong>' + selected.length + '</strong> batch ter-pilih · <strong>' + fmtN(totalBillable, 2) + ' KG</strong> billable · Total ongkos <strong>Rp ' + fmtN(totalOngkos, 0) + '</strong>';
+};
+
+window.toggleRekapBatch = function(id) {
+  if (window.__rekapSelected.has(id)) window.__rekapSelected.delete(id);
+  else window.__rekapSelected.add(id);
+  renderRekapSelectorTable();
+};
+
+window.rekapFilter = function(mode) {
+  const batches = window.__rekapBatchesCache || [];
+  window.__rekapSelected.clear();
+  batches.forEach(b => {
+    const isPaid = (b.ongkos_paid||'').toString().toUpperCase() === 'YES';
+    const status = (b.batch_status||'').toString().toLowerCase().trim();
+    const isInProgress = status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+    if (mode === 'all') window.__rekapSelected.add(b.id);
+    else if (mode === 'unpaid' && !isPaid && !isInProgress) window.__rekapSelected.add(b.id);
+    else if (mode === 'pending' && isInProgress) window.__rekapSelected.add(b.id);
+    else if (mode === 'paid' && isPaid) window.__rekapSelected.add(b.id);
+    // mode === 'none' → clear all (default already cleared)
+  });
+  renderRekapSelectorTable();
+};
+
+window.generateRekapStatus = function() {
+  const pekerja = window.__rekapPekerja;
+  const batches = window.__rekapBatchesCache || [];
+  const selectedIds = window.__rekapSelected;
+  const selected = batches.filter(b => selectedIds.has(b.id));
+  if (selected.length === 0) {
+    alert('Belum ada batch yang dipilih. Pilih minimal 1 batch via checkbox atau filter cepat.');
+    return;
+  }
+
+  // Sort by tgl_ambil asc untuk readability
+  selected.sort((a,b) => (a.tgl_ambil||'').localeCompare(b.tgl_ambil||''));
+
+  const totalOngkos = selected.reduce((s,b) => s + (+b.ongkos || (Math.max(0, (+b.total_setor||0) - (+b.gbs||0)) * 3000)), 0);
+  const totalBillable = selected.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  const paid = selected.filter(b => (b.ongkos_paid||'').toUpperCase() === 'YES');
+  const unpaid = selected.filter(b => {
+    const isPaid = (b.ongkos_paid||'').toUpperCase() === 'YES';
+    const status = (b.batch_status||'').toLowerCase().trim();
+    const isInProgress = status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+    return !isPaid && !isInProgress;
+  });
+  const pending = selected.filter(b => {
+    const status = (b.batch_status||'').toLowerCase().trim();
+    return status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+  });
+  const paidOngkos = paid.reduce((s,b) => s + (+b.ongkos || (Math.max(0, (+b.total_setor||0) - (+b.gbs||0)) * 3000)), 0);
+  const unpaidOngkos = unpaid.reduce((s,b) => s + (+b.ongkos || (Math.max(0, (+b.total_setor||0) - (+b.gbs||0)) * 3000)), 0);
+  const paidBillable = paid.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  const unpaidBillable = unpaid.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  const paidDates = [...new Set(paid.map(b => (b.paid_date||'').slice(0,10)).filter(d => d))].sort();
+  const lastPaidDate = paidDates.length ? paidDates[paidDates.length-1] : '';
+
+  const firstDt = selected[0].tgl_ambil || '';
+  const lastDt = selected[selected.length-1].tgl_setor || selected[selected.length-1].tgl_ambil || '';
+  const today = new Date().toISOString().slice(0,10);
+
+  const html = '<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">' +
+    '<title>Rekap Status Sortasi GB — ' + pekerja + '</title>' +
+    '<style>' +
+      '@page{size:A4;margin:1.4cm}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1B2A41;line-height:1.55;max-width:780px;margin:24px auto;padding:24px;background:#FAFCFE}' +
+      '.print-btn{background:#5B9279;color:#fff;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;margin-bottom:14px}' +
+      '.print-btn:hover{background:#4A7965}' +
+      '.header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;border-bottom:2.5px solid #5B9279;padding-bottom:16px;margin-bottom:22px}' +
+      '.header .logo{max-height:72px;max-width:140px;object-fit:contain}' +
+      '.header h1{margin:0;color:#1B2A41;text-align:center;font-size:20px;line-height:1.3}' +
+      '.header .subtitle{display:block;font-size:13px;font-weight:400;color:#888;margin-top:4px}' +
+      '.header-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;padding:14px 18px;background:#fff;border:1px solid #BFD7EA;border-radius:8px;font-size:13px}' +
+      '.header-meta strong{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;margin-bottom:2px}' +
+      '.header-meta div div{margin-bottom:8px}' +
+      '.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:18px 0;padding:14px;background:#fff;border:1px solid #BFD7EA;border-radius:8px}' +
+      '.summary .item{padding:8px 10px;border-radius:6px}' +
+      '.summary .item.total{background:#F0F4F8;border:1px solid #BFD7EA}' +
+      '.summary .item.paid{background:#DAEBE0;border:1px solid #5B9279}' +
+      '.summary .item.outstanding{background:#FCEBEB;border:1px solid #B85C5C}' +
+      '.summary .item .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;font-weight:700;margin-bottom:3px}' +
+      '.summary .item.paid .lbl{color:#2D5640}' +
+      '.summary .item.outstanding .lbl{color:#7A2A2A}' +
+      '.summary .item .val{font-size:14.5px;font-weight:700}' +
+      '.summary .item .sub{font-size:10.5px;color:var(--muted);margin-top:2px}' +
+      'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:11.5px;background:#fff;border-radius:6px;overflow:hidden}' +
+      'th{background:#1B2A41;color:#fff;padding:9px 7px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em}' +
+      'td{padding:7px;border-bottom:1px solid #EDF2F7}' +
+      'tr:last-child td{border-bottom:none}' +
+      '.num{text-align:right;font-family:"SF Mono",Monaco,monospace}' +
+      'tfoot td{background:#DAEBE0;font-weight:700;color:#2D5640;border-bottom:none;font-size:12.5px;padding:9px 7px}' +
+      '.badge{padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap}' +
+      '.b-paid{background:#DAEBE0;color:#2D5640}' +
+      '.b-unpaid{background:#FCE5D2;color:#7A4A1F}' +
+      '.b-pending{background:#F1EFE8;color:#6B6660}' +
+      '.narrative{margin:24px 0 16px 0;font-size:12.5px;line-height:1.75;padding:14px 18px;background:#fff;border-left:4px solid #5B9279;border-radius:6px}' +
+      '.signature{margin-top:50px;display:flex;justify-content:space-between;gap:60px}' +
+      '.signature div{text-align:center;flex:1}' +
+      '.signature .line{border-top:1.5px solid #1B2A41;margin-bottom:8px;margin-top:55px}' +
+      '.footnote{font-size:10.5px;color:#888;margin-top:30px;text-align:center;font-style:italic;border-top:1px solid #EDF2F7;padding-top:14px}' +
+      '@media print{.print-btn{display:none}body{background:#fff;max-width:none;padding:0;margin:0}.header .logo{max-height:60px}}' +
+    '</style></head><body>' +
+    '<button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
+    '<div class="header">' +
+      '<img class="logo" src="' + __LOGO_BONSARI_URL + '" alt="Bonsari Coffee" onerror="this.style.display=\'none\'" />' +
+      '<h1>REKAP STATUS SORTASI GREEN BEAN<span class="subtitle">Bonsari Coffee · Kebun Wakaf Produktif Kopi Ngantang</span></h1>' +
+      '<img class="logo" src="' + __LOGO_WAKAF_URL + '" alt="Wakaf Produktif Ngantang" onerror="this.style.display=\'none\'" />' +
+    '</div>' +
+    '<div class="header-meta">' +
+      '<div>' +
+        '<div><strong>Penerima</strong>' + pekerja + '</div>' +
+        '<div><strong>Periode Batch Ter-pilih</strong>' + (__formatIdnDate(firstDt)||firstDt||'—') + ' — ' + (__formatIdnDate(lastDt)||lastDt||'—') + '</div>' +
+        '<div><strong>Tanggal Cetak</strong>' + (__formatIdnDate(today)||today) + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div><strong>Tarif Ongkos</strong>Rp 3.000 / KG billable</div>' +
+        '<div><strong>Rumus Billable</strong>(Total Setor − GBS)</div>' +
+        '<div><strong>Pembayaran Terakhir</strong>' + (lastPaidDate ? (__formatIdnDate(lastPaidDate)||lastPaidDate) : '—') + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<h3 style="margin-top:24px;color:#2D5640;font-size:14px">💼 Ringkasan Saldo</h3>' +
+    '<div class="summary">' +
+      '<div class="item total"><div class="lbl">Total Selected</div><div class="val">Rp ' + fmtN(totalOngkos, 0) + '</div><div class="sub">' + selected.length + ' batch · ' + fmtN(totalBillable, 2) + ' KG billable</div></div>' +
+      '<div class="item paid"><div class="lbl">✅ Sudah Dibayar</div><div class="val">Rp ' + fmtN(paidOngkos, 0) + '</div><div class="sub">' + paid.length + ' batch · ' + fmtN(paidBillable, 2) + ' KG billable</div></div>' +
+      '<div class="item outstanding"><div class="lbl">⏳ Outstanding</div><div class="val">Rp ' + fmtN(unpaidOngkos, 0) + '</div><div class="sub">' + unpaid.length + ' batch · ' + fmtN(unpaidBillable, 2) + ' KG' + (pending.length > 0 ? ' · ' + pending.length + ' pending in-progress' : '') + '</div></div>' +
+    '</div>' +
+    '<h3 style="margin-top:24px;color:#2D5640;font-size:14px">📋 Detail Batch (' + selected.length + ' batch · sorted oldest first)</h3>' +
+    '<table>' +
+      '<thead><tr>' +
+        '<th>No</th><th>Tgl Ambil</th><th>Tgl Setor</th><th>Bakalan</th>' +
+        '<th class="num">Setor</th><th class="num">GBS</th>' +
+        '<th class="num">Billable</th><th class="num">Ongkos</th>' +
+        '<th>Tgl Bayar</th><th>Status</th>' +
+      '</tr></thead>' +
+      '<tbody>' +
+        selected.map((b,i) => {
+          const billable = Math.max(0, (+b.total_setor||0) - (+b.gbs||0));
+          const ongkos = +b.ongkos || (billable * 3000);
+          const isPaid = (b.ongkos_paid||'').toUpperCase() === 'YES';
+          const status = (b.batch_status||'').toLowerCase().trim();
+          const isInProgress = status === 'kirim' || (!b.total_setor && !b.tgl_setor);
+          let badge;
+          if (isInProgress) badge = '<span class="badge b-pending">🟡 Pending</span>';
+          else if (isPaid) badge = '<span class="badge b-paid">✅ Paid</span>';
+          else badge = '<span class="badge b-unpaid">⏳ Belum</span>';
+          return '<tr>' +
+            '<td>' + (i+1) + '</td>' +
+            '<td>' + (__formatIdnDate(b.tgl_ambil)||b.tgl_ambil||'—') + '</td>' +
+            '<td>' + (__formatIdnDate(b.tgl_setor)||b.tgl_setor||'—') + '</td>' +
+            '<td>' + (b.bakalan || '—') + '</td>' +
+            '<td class="num">' + (b.total_setor ? fmtN(+b.total_setor, 2) : '—') + '</td>' +
+            '<td class="num">' + (b.gbs ? fmtN(+b.gbs, 2) : '—') + '</td>' +
+            '<td class="num"><strong>' + (billable > 0 ? fmtN(billable, 2) : '—') + '</strong></td>' +
+            '<td class="num"><strong>' + (ongkos > 0 ? 'Rp ' + fmtN(ongkos, 0) : '—') + '</strong></td>' +
+            '<td>' + (__formatIdnDate(b.paid_date)||b.paid_date||'—') + '</td>' +
+            '<td>' + badge + '</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody>' +
+      '<tfoot><tr>' +
+        '<td colspan="6" style="text-align:right">TOTAL</td>' +
+        '<td class="num">' + fmtN(totalBillable, 2) + '</td>' +
+        '<td class="num">Rp ' + fmtN(totalOngkos, 0) + '</td>' +
+        '<td colspan="2"></td>' +
+      '</tr></tfoot>' +
+    '</table>' +
+    '<div class="narrative">Status sampai tanggal <strong>' + (__formatIdnDate(today)||today) + '</strong>: <strong>' + pekerja + '</strong> telah menyelesaikan ' + selected.length + ' batch sortasi (' + fmtN(totalBillable, 2) + ' KG billable). Dari jumlah tersebut, <strong>Rp ' + fmtN(paidOngkos, 0) + '</strong> sudah dibayar (' + paid.length + ' batch), dan <strong>Rp ' + fmtN(unpaidOngkos, 0) + '</strong> masih outstanding (' + unpaid.length + ' batch). ' + (pending.length > 0 ? 'Plus ' + pending.length + ' batch in-progress (belum kembali). ' : '') + 'Silakan diskusi dengan Pak Adib kapan pembayaran berikutnya akan dilakukan — bisa langsung sekarang atau ditunggu sampai outstanding ngumpul lebih banyak.</div>' +
+    '<div class="signature">' +
+      '<div><div class="line"></div><strong>' + pekerja + '</strong><br/><span style="font-size:11px;color:#888">(Konfirmasi rekap diterima)</span></div>' +
+      '<div><div class="line"></div><strong>Adib Asrori</strong><br/><span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span></div>' +
+    '</div>' +
+    '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '. Bukan bukti pembayaran transfer.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
+    '</body></html>';
+
+  const win = window.open('', '_blank', 'width=900,height=950,scrollbars=yes');
+  if (!win) {
+    alert('Pop-up diblokir browser. Allow pop-up untuk site ini untuk generate Rekap Status.');
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+
+  // Close selector modal after generate
+  const selectorModal = document.getElementById('rekap-selector-modal');
+  if (selectorModal) selectorModal.remove();
 };
 
 // === Bayar Worker All — POST to Apps Script ===
