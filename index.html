@@ -357,15 +357,15 @@ footer a{color:var(--steel);text-decoration:none}
   <!-- ╚════════════════════════════════════════════════════════════╝ -->
   <div class="section" id="reconciliation-panel">
     <h2>🔍 Identity Reconciliation <span class="badge" id="reco-summary">memuat…</span></h2>
-    <div class="note"><strong>Tujuan:</strong> Otomatis flag merah kalau identity formula tidak match — scan 10 detik tanpa cek angka manual. Toleransi: Rp ≤ Rp 1 · KG ≤ 0,001. <strong>🔒 LOCKED</strong> = drift historis yang sudah diketahui (audit trail).</div>
+    <div class="note"><strong>Cara baca:</strong> Tiap baris = satu angka yang dihitung lewat <strong>2 cara berbeda</strong> (dari sumber atau rumus berbeda). Idealnya hasilnya SAMA persis. Kalau beda → ada drift di salah satu sumber yang harus dicek. <strong>✅ MATCH</strong> = aman · <strong>🔒 LOCKED</strong> = drift historis yang sudah diketahui (audit trail) · <strong>🔴 DRIFT</strong> = perlu investigasi. Toleransi: Rp ≤ Rp 1 · KG ≤ 0,01.</div>
     <div style="background:#FAFCFE;border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;overflow-x:auto">
       <table style="width:100%;font-size:13px" id="reco-table">
         <thead>
           <tr style="border-bottom:2px solid var(--border)">
             <th style="padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Identity Check</th>
-            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Sisi A</th>
-            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Sisi B</th>
-            <th class="num" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Selisih</th>
+            <th class="num" style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Hitung Cara 1</th>
+            <th class="num" style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Hitung Cara 2</th>
+            <th class="num" style="padding:8px 10px;text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Selisih</th>
             <th style="padding:8px 10px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted)">Status</th>
           </tr>
         </thead>
@@ -4224,13 +4224,13 @@ function __renderReconciliation() {
   if (!tbody) return;
 
   const fmtRp = (n) => '<span style="font-size:10px;color:var(--muted)">Rp</span> ' + fmtN(Math.round(n||0), 0);
-  const fmtKgD = (n) => fmtN(n||0, 3) + ' KG';
+  const fmtKgD = (n) => fmtN(n||0, 2) + ' KG'; // V9.8 A.1.1 — 2 desimal per Adib request
 
   // ① Σ Sortir Paid (Sortasi sheet) vs Pengeluaran kategori Sortir
-  const sortirPaid = (D.sortasi || []).filter(s =>
-    String(s.ongkos_paid || '').toUpperCase() === 'YES' ||
-    String(s.ongkos_paid || '').toUpperCase() === 'TRUE'
-  ).reduce((sum, s) => sum + (+s.ongkos || 0), 0);
+  // V9.8 A.1.1 fix: pakai D.total_paid_ongkos (sudah pre-computed di __recomputeKPIs L1854
+  // dari workerStats aggregate) — sebelumnya filter D.sortasi yang BUKAN nama field actual
+  // (actual data di window.__bonsariCachedData.data.sortasi atau D.sortasi_batches).
+  const sortirPaid = (+D.total_paid_ongkos || 0);
   const pengSortir = (D.pengeluaran || []).filter(e =>
     /sortir/i.test(e.kategori || '')
   ).reduce((sum, e) => sum + (+e.total || 0), 0);
@@ -4259,24 +4259,32 @@ function __renderReconciliation() {
 
   const rows = [
     {
-      name: '① Sortir Paid vs Pengeluaran Sortir',
+      name: '① Total bayar Sortir',
+      labelA: 'Dari Sortasi sheet<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(Σ yg di-flag PAID)</span>',
+      labelB: 'Dari Pengeluaran<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(kategori Sortir)</span>',
       a: sortirPaid, b: pengSortir,
       fmt: fmtRp, tol: TOL_RP,
       lockedDiff: M13_LOCKED_DIFF,
       lockedNote: 'M13: kelebihan Rp 41.460 di Sortasi = duplicate. Reset paid_flag in-progress (B.2)'
     },
     {
-      name: '② Sales − HPP vs Gross Profit',
+      name: '② Gross Profit',
+      labelA: 'Hitung dari rumus<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(Sales − HPP)</span>',
+      labelB: 'Tampil di Akuntansi<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(card Gross Profit)</span>',
       a: grossExpected, b: grossDisplayed,
       fmt: fmtRp, tol: TOL_RP
     },
     {
-      name: '③ Modal + Sales − Peng vs Saldo Formal',
+      name: '③ Saldo Formal',
+      labelA: 'Hitung dari rumus<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(Modal + Sales − Peng)</span>',
+      labelB: 'Tampil di Cash Position<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(card Saldo Formal)</span>',
       a: saldoExpected, b: saldoDisplayed,
       fmt: fmtRp, tol: TOL_RP
     },
     {
-      name: '④ Σ Movements vs Stock Live',
+      name: '④ Stock GB Total',
+      labelA: 'Dari Movement log<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(Σ qty_signed)</span>',
+      labelB: 'Tampil di HERO LogBook<br/><span style="font-size:10px;color:var(--muted);font-weight:400">(Stock per Grade)</span>',
       a: sumMovements, b: stockTotal,
       fmt: fmtKgD, tol: TOL_KG
     }
@@ -4308,12 +4316,20 @@ function __renderReconciliation() {
     }
     const diffSign = (diff > 0 && absDiff > r.tol) ? '+' : '';
     const noteLine = r.lockedNote ? '<div style="font-size:10.5px;color:var(--muted);font-style:italic;margin-top:3px;font-weight:400">' + r.lockedNote + '</div>' : '';
+    const labelA = r.labelA || '';
+    const labelB = r.labelB || '';
     return '<tr style="background:' + rowBg + ';border-bottom:1px solid var(--border)">' +
-      '<td style="padding:9px 10px;font-weight:600">' + r.name + noteLine + '</td>' +
-      '<td class="num" style="padding:9px 10px;font-family:monospace">' + r.fmt(r.a) + '</td>' +
-      '<td class="num" style="padding:9px 10px;font-family:monospace">' + r.fmt(r.b) + '</td>' +
-      '<td class="num" style="padding:9px 10px;font-family:monospace;color:' + (absDiff <= r.tol ? 'var(--muted)' : statusColor) + ';font-weight:' + (absDiff <= r.tol ? '400' : '700') + '">' + diffSign + r.fmt(diff) + '</td>' +
-      '<td style="padding:9px 10px;text-align:center"><span style="background:' + statusBg + ';color:' + statusColor + ';padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">' + status + '</span></td>' +
+      '<td style="padding:9px 10px;font-weight:600;vertical-align:top">' + r.name + noteLine + '</td>' +
+      '<td class="num" style="padding:9px 10px;vertical-align:top">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--steel);text-align:right;line-height:1.35;margin-bottom:4px">' + labelA + '</div>' +
+        '<div style="font-family:monospace;text-align:right">' + r.fmt(r.a) + '</div>' +
+      '</td>' +
+      '<td class="num" style="padding:9px 10px;vertical-align:top">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--steel);text-align:right;line-height:1.35;margin-bottom:4px">' + labelB + '</div>' +
+        '<div style="font-family:monospace;text-align:right">' + r.fmt(r.b) + '</div>' +
+      '</td>' +
+      '<td class="num" style="padding:9px 10px;font-family:monospace;vertical-align:middle;color:' + (absDiff <= r.tol ? 'var(--muted)' : statusColor) + ';font-weight:' + (absDiff <= r.tol ? '400' : '700') + '">' + diffSign + r.fmt(diff) + '</td>' +
+      '<td style="padding:9px 10px;text-align:center;vertical-align:middle"><span style="background:' + statusBg + ';color:' + statusColor + ';padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap">' + status + '</span></td>' +
       '</tr>';
   }).join('');
 
