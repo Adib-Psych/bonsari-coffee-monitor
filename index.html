@@ -4187,7 +4187,9 @@ function renderMarginDistribution(){
   const gpCanvas = document.getElementById('ch-gp-alloc');
   if(gpCanvas){
     const gpData = ['opex','depresiasi','pajak','carrying','net_profit'].map(k=>M.layers[k]);
-    new Chart(gpCanvas, {
+    // V9.8 A.1.8 — Destroy existing gp-alloc chart sebelum recreate (mirror pattern A.1.7 waterfall).
+    if (window.__gpAllocChart) { try { window.__gpAllocChart.destroy(); } catch(e){} }
+    window.__gpAllocChart = new Chart(gpCanvas, {
       type:'doughnut',
       data:{
         labels: gpData.map(d=>d.label),
