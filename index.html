@@ -1865,7 +1865,10 @@ function __recomputeKPIs() {
       workerStats[w] = { pekerja: w, total_batch: 0, total_input_kg: 0, total_setor_kg: 0,
         total_ongkos: 0, total_paid: 0, outstanding: 0, pending_batch: 0, pending_kg: 0,
         unpaid_batch: 0, paid_batch: 0, total_gbp: 0, total_gbc: 0, total_gbl: 0, total_gbs: 0,
-        avg_yield: 0 };
+        avg_yield: 0,
+        // V9.8 A.1.12 — Billable KG aggregate (= total_setor − GBS). Pekerja bisa
+        // double-check: KG billable × Rp 3.000 = nominal yang akan diterima.
+        billable_paid_kg: 0, billable_unpaid_kg: 0 };
     }
     const ws = workerStats[w];
     ws.total_batch++;
@@ -1875,14 +1878,23 @@ function __recomputeKPIs() {
     ws.total_gbc += +s.gbc || 0;
     ws.total_gbl += +s.gbl || 0;
     ws.total_gbs += +s.gbs || 0;
+    // V9.8 A.1.12 — Billable KG (total_setor − GBS, floor at 0)
+    const billableKg = Math.max(0, (+s.total_setor || 0) - (+s.gbs || 0));
     let ongkos = +s.ongkos || 0;
     if (!ongkos && s.total_setor) {
-      ongkos = ((+s.total_setor || 0) - (+s.gbs || 0)) * ONGKOS_RATE;
+      ongkos = billableKg * ONGKOS_RATE;
     }
     ws.total_ongkos += ongkos;
     const isPaid = (s.ongkos_paid || '').toString().toUpperCase() === 'YES';
-    if (isPaid) { ws.total_paid += ongkos; ws.paid_batch++; }
-    else { ws.outstanding += ongkos; ws.unpaid_batch++; }
+    if (isPaid) {
+      ws.total_paid += ongkos;
+      ws.paid_batch++;
+      ws.billable_paid_kg += billableKg;
+    } else {
+      ws.outstanding += ongkos;
+      ws.unpaid_batch++;
+      ws.billable_unpaid_kg += billableKg;
+    }
     // V7.10 fix: a batch is "pending kembali" ONLY if status='kirim' (explicit).
     // Don't count batches with status='kembali' even if total_setor=0 (those are archived/susut-100%).
     const status = (s.batch_status || '').toString().toLowerCase().trim();
@@ -3170,12 +3182,12 @@ function renderWorkerPayment(){
         <div style="background:#DAEBE0;border-radius:6px;padding:8px">
           <div style="font-size:10px;color:#2D5640;font-weight:600;text-transform:uppercase">✅ Paid</div>
           <div style="font-size:13px;font-weight:700;color:#2D5640">${fmt(w.total_paid)}</div>
-          <div style="font-size:10px;color:#5B9279">${w.paid_batch} batch</div>
+          <div style="font-size:10px;color:#5B9279">${w.paid_batch} batch · ${fmtN(w.billable_paid_kg||0,2)} KG billable</div>
         </div>
         <div style="background:#FCEBEB;border-radius:6px;padding:8px">
           <div style="font-size:10px;color:#7A2A2A;font-weight:600;text-transform:uppercase">💸 Outstanding</div>
           <div style="font-size:13px;font-weight:700;color:#B85C5C">${fmt(w.outstanding)}</div>
-          <div style="font-size:10px;color:#B85C5C">${w.unpaid_batch} batch</div>
+          <div style="font-size:10px;color:#B85C5C">${w.unpaid_batch} batch · ${fmtN(w.billable_unpaid_kg||0,2)} KG × Rp 3.000</div>
         </div>
       </div>
       <!-- Progress bar -->
@@ -3187,14 +3199,137 @@ function renderWorkerPayment(){
           <div style="background:#5B9279;height:100%;width:${Math.min(paidPct,100)}%;transition:width 0.3s"></div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:${w.outstanding > 0 ? '2fr 1fr' : '1fr'};gap:6px">
+      <div style="display:grid;grid-template-columns:${w.outstanding > 0 ? '2fr 1fr' : '1fr'};gap:6px;margin-bottom:6px">
         ${w.outstanding > 0 ? `<button onclick="bayarWorkerAll('${w.pekerja.replace(/'/g, '&apos;')}', ${w.outstanding})" style="background:#3A6EA5;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">💸 Bayar Semua (${fmt(w.outstanding)})</button>` : '<div style="text-align:center;padding:6px;font-size:11px;color:#5B9279;font-weight:600">✅ Semua batch sudah dibayar</div>'}
         <button onclick="openBatchDetail('${w.pekerja.replace(/'/g, '&apos;')}')" style="background:#fff;color:#3A6EA5;border:1px solid #3A6EA5;border-radius:6px;padding:8px 12px;font-size:11.5px;font-weight:600;cursor:pointer">📋 Detail Batch</button>
       </div>
+      <!-- V9.8 A.1.12 — Bukti Bayar generator -->
+      ${w.paid_batch > 0 ? `<button onclick="generateBuktiBayar('${w.pekerja.replace(/'/g, '&apos;')}')" style="width:100%;background:#fff;color:#5B9279;border:1px solid #5B9279;border-radius:6px;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer">💾 Generate Bukti Bayar (PDF)</button>` : ''}
     </div>`;
   }).join('');
 } // END renderWorkerPayment (V9.1 F4-3)
 renderWorkerPayment();
+
+// ═══════════════════════════════════════════════════════════════
+// V9.8 A.1.12 — GENERATE BUKTI BAYAR (Receipt PDF)
+// ═══════════════════════════════════════════════════════════════
+// Click button "💾 Generate Bukti Bayar" di card pekerja → open new window
+// dengan printable receipt layout. User Cmd+P → Save as PDF.
+// Mirror pattern dari Wakaf Dashboard bukti bayar generator.
+window.generateBuktiBayar = function(pekerja) {
+  const sortasiBatches = (window.__bonsariCachedData?.data?.sortasi || D.sortasi_batches || []);
+  const allBatches = sortasiBatches.filter(s => {
+    let w = (s.pekerja || '').toString().trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+    return w === pekerja && (String(s.ongkos_paid||'').toUpperCase() === 'YES');
+  });
+
+  if (allBatches.length === 0) {
+    alert('Tidak ada batch paid untuk ' + pekerja + '. Bukti Bayar tidak bisa di-generate.');
+    return;
+  }
+
+  // Sort by tgl_setor asc (oldest first untuk audit trail)
+  allBatches.sort((a,b) => (a.tgl_setor||a.tgl_ambil||'').localeCompare(b.tgl_setor||b.tgl_ambil||''));
+
+  const totalOngkos = allBatches.reduce((s,b) => {
+    const billable = Math.max(0, (+b.total_setor||0) - (+b.gbs||0));
+    return s + (+b.ongkos || billable * 3000);
+  }, 0);
+  const totalBillable = allBatches.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  const paidDates = [...new Set(allBatches.map(b => (b.paid_date||'').slice(0,10)).filter(d => d))].sort();
+  const firstDt = allBatches[0].tgl_ambil || '';
+  const lastDt = allBatches[allBatches.length-1].tgl_setor || allBatches[allBatches.length-1].tgl_ambil || '';
+  const today = new Date().toISOString().slice(0,10);
+
+  const html = '<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">' +
+    '<title>Bukti Bayar Ongkos Sortir — ' + pekerja + '</title>' +
+    '<style>' +
+      '@page{size:A4;margin:1.5cm}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1B2A41;line-height:1.55;max-width:750px;margin:24px auto;padding:24px;background:#FAFCFE}' +
+      '.print-btn{background:#5B9279;color:#fff;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;margin-bottom:16px}' +
+      '.print-btn:hover{background:#4A7965}' +
+      'h1{color:#1B2A41;text-align:center;border-bottom:2.5px solid #5B9279;padding-bottom:14px;margin:8px 0 24px 0;font-size:22px}' +
+      '.logo{text-align:center;font-size:32px;margin-bottom:4px}' +
+      '.subtitle{font-size:13.5px;font-weight:400;color:#888;display:block;margin-top:4px}' +
+      '.header-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;padding:14px 18px;background:#fff;border:1px solid #BFD7EA;border-radius:8px;font-size:13px}' +
+      '.header-meta strong{color:#1B2A41;display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;margin-bottom:2px}' +
+      '.header-meta div div{margin-bottom:8px}' +
+      'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px;background:#fff;border-radius:6px;overflow:hidden}' +
+      'th{background:#1B2A41;color:#fff;padding:9px 8px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em}' +
+      'td{padding:7px 8px;border-bottom:1px solid #EDF2F7}' +
+      'tr:last-child td{border-bottom:none}' +
+      '.num{text-align:right;font-family:"SF Mono",Monaco,monospace}' +
+      'tfoot td{background:#DAEBE0;font-weight:700;color:#2D5640;border-bottom:none;font-size:13px;padding:10px 8px}' +
+      '.narrative{margin:24px 0 16px 0;font-size:13px;line-height:1.75;padding:14px 18px;background:#fff;border-left:4px solid #5B9279;border-radius:6px}' +
+      '.signature{margin-top:50px;display:flex;justify-content:space-between;gap:60px}' +
+      '.signature div{text-align:center;flex:1}' +
+      '.signature .line{border-top:1.5px solid #1B2A41;margin-bottom:8px;margin-top:60px}' +
+      '.footnote{font-size:10.5px;color:#888;margin-top:30px;text-align:center;font-style:italic;border-top:1px solid #EDF2F7;padding-top:14px}' +
+      '@media print{.print-btn{display:none}body{background:#fff;max-width:none;padding:0;margin:0}}' +
+    '</style></head><body>' +
+    '<button class="print-btn" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
+    '<div class="logo">🌱</div>' +
+    '<h1>BONSARI COFFEE<span class="subtitle">Bukti Pembayaran Ongkos Sortir</span></h1>' +
+    '<div class="header-meta">' +
+      '<div>' +
+        '<div><strong>Penerima</strong>' + pekerja + '</div>' +
+        '<div><strong>Periode Batch</strong>' + (__formatIdnDate(firstDt)||firstDt) + ' — ' + (__formatIdnDate(lastDt)||lastDt) + '</div>' +
+        '<div><strong>Dokumen di-generate</strong>' + (__formatIdnDate(today)||today) + '</div>' +
+      '</div>' +
+      '<div>' +
+        '<div><strong>Tarif Ongkos</strong>Rp 3.000 / KG billable</div>' +
+        '<div><strong>Rumus Billable</strong>(Total Setor − GBS)</div>' +
+        '<div><strong>Tanggal Pembayaran</strong>' + (paidDates.length > 0 ? paidDates.map(d => __formatIdnDate(d)||d).join(' · ') : '—') + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<h3 style="margin-top:24px;color:#2D5640;font-size:14px">Detail Batch (' + allBatches.length + ' batch)</h3>' +
+    '<table>' +
+      '<thead><tr>' +
+        '<th>No</th><th>Tgl Ambil</th><th>Tgl Setor</th><th>Bakalan</th>' +
+        '<th class="num">Setor (KG)</th><th class="num">GBS (KG)</th>' +
+        '<th class="num">Billable (KG)</th><th class="num">Ongkos (Rp)</th><th>Tgl Bayar</th>' +
+      '</tr></thead>' +
+      '<tbody>' +
+        allBatches.map((b,i) => {
+          const billable = Math.max(0, (+b.total_setor||0) - (+b.gbs||0));
+          const ongkos = +b.ongkos || (billable * 3000);
+          return '<tr>' +
+            '<td>' + (i+1) + '</td>' +
+            '<td>' + (__formatIdnDate(b.tgl_ambil)||b.tgl_ambil||'—') + '</td>' +
+            '<td>' + (__formatIdnDate(b.tgl_setor)||b.tgl_setor||'—') + '</td>' +
+            '<td>' + (b.bakalan || '—') + '</td>' +
+            '<td class="num">' + fmtN(+b.total_setor||0, 2) + '</td>' +
+            '<td class="num">' + fmtN(+b.gbs||0, 2) + '</td>' +
+            '<td class="num"><strong>' + fmtN(billable, 2) + '</strong></td>' +
+            '<td class="num"><strong>Rp ' + fmtN(ongkos, 0) + '</strong></td>' +
+            '<td>' + (__formatIdnDate(b.paid_date)||b.paid_date||'—') + '</td>' +
+          '</tr>';
+        }).join('') +
+      '</tbody>' +
+      '<tfoot><tr>' +
+        '<td colspan="6" style="text-align:right">TOTAL</td>' +
+        '<td class="num">' + fmtN(totalBillable, 2) + '</td>' +
+        '<td class="num">Rp ' + fmtN(totalOngkos, 0) + '</td>' +
+        '<td></td>' +
+      '</tr></tfoot>' +
+    '</table>' +
+    '<div class="narrative">Dengan ini, <strong>' + pekerja + '</strong> telah menerima pembayaran ongkos sortir kopi sejumlah <strong>Rp ' + fmtN(totalOngkos, 0) + '</strong> (' + fmtN(totalBillable, 2) + ' KG billable × Rp 3.000) untuk total <strong>' + allBatches.length + ' batch sortasi</strong> periode ' + (__formatIdnDate(firstDt)||firstDt) + ' sampai ' + (__formatIdnDate(lastDt)||lastDt) + '. Pembayaran dilakukan dalam ' + (paidDates.length||1) + ' kali transfer pada tanggal: ' + (paidDates.length > 0 ? paidDates.map(d => __formatIdnDate(d)||d).join(', ') : '—') + '.</div>' +
+    '<div class="signature">' +
+      '<div><div class="line"></div><strong>' + pekerja + '</strong><br/><span style="font-size:11px;color:#888">(Penerima)</span></div>' +
+      '<div><div class="line"></div><strong>Adib Asrori</strong><br/><span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span></div>' +
+    '</div>' +
+    '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
+    '</body></html>';
+
+  const win = window.open('', '_blank', 'width=900,height=950,scrollbars=yes');
+  if (!win) {
+    alert('Pop-up diblokir browser. Allow pop-up untuk site ini untuk generate Bukti Bayar.');
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+};
 
 // === Bayar Worker All — POST to Apps Script ===
 window.bayarWorkerAll = async function(pekerja, totalAmount) {
