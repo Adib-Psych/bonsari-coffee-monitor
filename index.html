@@ -1070,6 +1070,7 @@ footer a{color:var(--steel);text-decoration:none}
           <th>No</th><th>Pekerja</th><th>Tgl Ambil</th><th>Bakalan</th><th class="num">Input</th>
           <th class="num">GBP</th><th class="num">GBC</th><th class="num">GBL</th><th class="num">GBS</th>
           <th class="num">Setor</th><th class="num">Susut</th><th class="num">Yield%</th><th class="num">Ongkos</th>
+          <th style="text-align:center">Paid?</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -1539,7 +1540,8 @@ function mergeApiData(apiResponse) {
       'renderExp',              // V9.2 — Pengeluaran tab tables + KPIs
       'renderHppPackMatrix',    // V9.2 — HPP Reference matrix
       'renderMarginDistribution', // V9.2 — Akuntansi margin distribution viz
-      '__renderReconciliation'  // V9.8 A.1 — Identity Reconciliation panel (4 checks)
+      '__renderReconciliation', // V9.8 A.1 — Identity Reconciliation panel (4 checks)
+      'renderSortBatchTable'    // V9.8 A.1.5 — Tabel Detail per Batch dengan kolom Paid (was inline IIFE)
       // NOTE: renderNotaTab skipped — async, has own filter handlers
       // NOTE: renderLogBookFull + renderProduksiFull already called above (V8.7 + V8.9)
     ].forEach(fnName => {
@@ -3395,37 +3397,60 @@ new Chart(document.getElementById('ch-sort-bar'),{
 });
 
 // Detail table — newest first
-const sortBatchesSorted = [...D.sortasi_batches].sort((a,b)=>{
-  const parseDate = s=>{
-    if(!s) return [0,0,0];
-    const m = String(s).match(/(\d+)\s+(\w+)\s+(\d{4})/);
-    if(!m) return [0,0,0];
-    const months={Jan:1,Feb:2,Mar:3,Apr:4,Mei:5,Jun:6,Jul:7,Agu:8,Sep:9,Okt:10,Nov:11,Des:12};
-    return [parseInt(m[3]), months[m[2].slice(0,3)]||0, parseInt(m[1])];
-  };
-  const da = parseDate(a.tgl_ambil), db = parseDate(b.tgl_ambil);
-  return db[0]-da[0] || db[1]-da[1] || db[2]-da[2];
-});
-const sortTb = document.querySelector('#tbl-sort tbody');
-sortTb.innerHTML = sortBatchesSorted.map(r=>{
-  const susutColor = (r.susut||0) > 0.5 ? 'color:var(--danger);font-weight:600' : 'color:var(--muted)';
-  const bakalanCls = r.bakalan==='GBP'?'tag-gb':(r.bakalan==='GBC'?'tag-rb':'tag-gc');
-  return `<tr>
-    <td>${r.no||''}</td>
-    <td style="font-size:11.5px">${r.pekerja||''}</td>
-    <td>${__formatIdnDate(r.tgl_ambil)||''}</td>
-    <td><span class="tag ${bakalanCls}">${r.bakalan||''}</span></td>
-    <td class="num">${fmtN(r.qty_input||0,2)} <span style="color:var(--muted);font-size:10px">KG</span></td>
-    <td class="num" style="background:#EAF3DE">${r.gbp_out?fmtN(r.gbp_out,2):'—'}</td>
-    <td class="num">${r.gbc_out?fmtN(r.gbc_out,2):'—'}</td>
-    <td class="num" style="background:#DCEAE0">${r.lanang_out?fmtN(r.lanang_out,2):'—'}</td>
-    <td class="num">${r.gbs_out?fmtN(r.gbs_out,2):'—'}</td>
-    <td class="num" style="font-weight:600">${fmtN(r.total_setor||0,2)}</td>
-    <td class="num" style="${susutColor}">${(r.susut||0)>0?fmtN(r.susut,2):'—'}</td>
-    <td class="num">${r.yield_pct?(r.yield_pct*100).toFixed(1)+'%':'—'}</td>
-    <td class="num"><span style="color:var(--muted);font-size:10px">Rp</span> ${fmtN(r.ongkos||0,0)}</td>
-  </tr>`;
-}).join('');
+// V9.8 A.1.5 — Wrap inline render jadi named function + register V9.2 chain.
+// Restore V1 single-batch payment visibility: tambah kolom Paid? di akhir.
+// Pakai existing openBatchDetail() modal untuk edit per-batch (filter status,
+// save all). Kolom Paid? klik = drill ke modal pekerja terkait.
+function renderSortBatchTable() {
+  const sortTb = document.querySelector('#tbl-sort tbody');
+  if (!sortTb || !D.sortasi_batches) return;
+  const sortBatchesSorted = [...D.sortasi_batches].sort((a,b)=>{
+    const parseDate = s=>{
+      if(!s) return [0,0,0];
+      const m = String(s).match(/(\d+)\s+(\w+)\s+(\d{4})/);
+      if(!m) return [0,0,0];
+      const months={Jan:1,Feb:2,Mar:3,Apr:4,Mei:5,Jun:6,Jul:7,Agu:8,Sep:9,Okt:10,Nov:11,Des:12};
+      return [parseInt(m[3]), months[m[2].slice(0,3)]||0, parseInt(m[1])];
+    };
+    const da = parseDate(a.tgl_ambil), db = parseDate(b.tgl_ambil);
+    return db[0]-da[0] || db[1]-da[1] || db[2]-da[2];
+  });
+  sortTb.innerHTML = sortBatchesSorted.map(r=>{
+    const susutColor = (r.susut||0) > 0.5 ? 'color:var(--danger);font-weight:600' : 'color:var(--muted)';
+    const bakalanCls = r.bakalan==='GBP'?'tag-gb':(r.bakalan==='GBC'?'tag-rb':'tag-gc');
+    // V9.8 A.1.5 — Status Paid per batch
+    const isPaid = String(r.ongkos_paid||'').toUpperCase() === 'YES';
+    const status = (r.batch_status||'').toLowerCase();
+    const isInProgress = (status === 'kirim') || (!r.total_setor && !r.tgl_setor);
+    let paidCell;
+    if (isInProgress) {
+      paidCell = '<td style="text-align:center"><span style="background:#F1EFE8;color:#6B6660;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600;white-space:nowrap">🟡 In-progress</span></td>';
+    } else if (isPaid) {
+      const paidDt = __formatIdnDate(r.paid_date) || r.paid_date || '—';
+      paidCell = '<td style="text-align:center"><span style="background:#DAEBE0;color:#2D5640;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600;white-space:nowrap" title="Dibayar ' + paidDt + '">✅ ' + paidDt + '</span></td>';
+    } else {
+      const pekerjaEsc = String(r.pekerja||'').replace(/'/g, '&apos;').replace(/\s*\([^)]*\)\s*$/, '').trim();
+      paidCell = '<td style="text-align:center"><button onclick="openBatchDetail(\'' + pekerjaEsc + '\')" title="Buka modal Detail Batch untuk bayar single-batch atau bulk" style="background:#E89F4D;color:#fff;border:none;border-radius:10px;padding:3px 10px;font-size:10.5px;font-weight:600;cursor:pointer;white-space:nowrap">⏳ Bayar</button></td>';
+    }
+    return '<tr>'
+      + '<td>' + (r.no||'') + '</td>'
+      + '<td style="font-size:11.5px">' + (r.pekerja||'') + '</td>'
+      + '<td>' + (__formatIdnDate(r.tgl_ambil)||'') + '</td>'
+      + '<td><span class="tag ' + bakalanCls + '">' + (r.bakalan||'') + '</span></td>'
+      + '<td class="num">' + fmtN(r.qty_input||0,2) + ' <span style="color:var(--muted);font-size:10px">KG</span></td>'
+      + '<td class="num" style="background:#EAF3DE">' + (r.gbp_out?fmtN(r.gbp_out,2):'—') + '</td>'
+      + '<td class="num">' + (r.gbc_out?fmtN(r.gbc_out,2):'—') + '</td>'
+      + '<td class="num" style="background:#DCEAE0">' + (r.lanang_out?fmtN(r.lanang_out,2):'—') + '</td>'
+      + '<td class="num">' + (r.gbs_out?fmtN(r.gbs_out,2):'—') + '</td>'
+      + '<td class="num" style="font-weight:600">' + fmtN(r.total_setor||0,2) + '</td>'
+      + '<td class="num" style="' + susutColor + '">' + ((r.susut||0)>0?fmtN(r.susut,2):'—') + '</td>'
+      + '<td class="num">' + (r.yield_pct?(r.yield_pct*100).toFixed(1)+'%':'—') + '</td>'
+      + '<td class="num"><span style="color:var(--muted);font-size:10px">Rp</span> ' + fmtN(r.ongkos||0,0) + '</td>'
+      + paidCell
+      + '</tr>';
+  }).join('');
+}
+renderSortBatchTable();
 // ============= AKUNTANSI (V9.1 F4-2 — wrapped in named function for re-render on data merge) =============
 function renderAkuntansi(){
   const A = D.accounting;
