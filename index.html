@@ -3551,6 +3551,12 @@ window.generateRekapStatus = function() {
   const unpaidOngkos = unpaid.reduce((s,b) => s + (+b.ongkos || (Math.max(0, (+b.total_setor||0) - (+b.gbs||0)) * 3000)), 0);
   const paidBillable = paid.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
   const unpaidBillable = unpaid.reduce((s,b) => s + Math.max(0, (+b.total_setor||0) - (+b.gbs||0)), 0);
+  // V9.8 A.1.14.1 — Pending Pekerjaan (Kg) = GB di tangan pekerja (qty_input batches in-progress)
+  // Per Adib correction: sumber bukan Rp ongkos unpaid, tapi KG yang masih dipegang pekerja.
+  // Same data dengan "X KG di tangan" card di dashboard.
+  const pendingKg = pending.reduce((s,b) => s + (+b.qty_input || 0), 0);
+  const belumDibayar = totalOngkos - paidOngkos;
+  const belumDibayarBatch = selected.length - paid.length - pending.length;
   const paidDates = [...new Set(paid.map(b => (b.paid_date||'').slice(0,10)).filter(d => d))].sort();
   const lastPaidDate = paidDates.length ? paidDates[paidDates.length-1] : '';
 
@@ -3561,42 +3567,44 @@ window.generateRekapStatus = function() {
   const html = '<!DOCTYPE html><html lang="id"><head><meta charset="utf-8">' +
     '<title>Rekap Status Sortasi GB — ' + pekerja + '</title>' +
     '<style>' +
-      '@page{size:A4;margin:1.4cm}' +
-      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1B2A41;line-height:1.55;max-width:780px;margin:24px auto;padding:24px;background:#FAFCFE}' +
+      '@page{size:A4 landscape;margin:1cm}' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1B2A41;line-height:1.55;max-width:1200px;margin:24px auto;padding:32px;background:#FAFCFE}' +
       '.print-btn{background:#5B9279;color:#fff;border:none;padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;margin-bottom:14px}' +
       '.print-btn:hover{background:#4A7965}' +
-      '.header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;border-bottom:2.5px solid #5B9279;padding-bottom:16px;margin-bottom:22px}' +
-      '.header .logo{max-height:72px;max-width:140px;object-fit:contain}' +
-      '.header h1{margin:0;color:#1B2A41;text-align:center;font-size:20px;line-height:1.3}' +
-      '.header .subtitle{display:block;font-size:13px;font-weight:400;color:#888;margin-top:4px}' +
-      '.header-meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;padding:14px 18px;background:#fff;border:1px solid #BFD7EA;border-radius:8px;font-size:13px}' +
-      '.header-meta strong{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;margin-bottom:2px}' +
-      '.header-meta div div{margin-bottom:8px}' +
-      '.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:18px 0;padding:14px;background:#fff;border:1px solid #BFD7EA;border-radius:8px}' +
-      '.summary .item{padding:8px 10px;border-radius:6px}' +
+      '.header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:20px;border-bottom:2.5px solid #5B9279;padding-bottom:18px;margin-bottom:26px}' +
+      '.header .logo{max-height:78px;max-width:150px;object-fit:contain}' +
+      '.header h1{margin:0;color:#1B2A41;text-align:center;font-size:22px;line-height:1.3}' +
+      '.header .subtitle{display:block;font-size:13.5px;font-weight:400;color:#888;margin-top:5px}' +
+      '.header-meta{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;padding:16px 22px;background:#fff;border:1px solid #BFD7EA;border-radius:8px;font-size:13.5px}' +
+      '.header-meta strong{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;margin-bottom:3px}' +
+      '.header-meta div div{margin-bottom:10px}' +
+      '.summary{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:22px 0;padding:16px;background:#fff;border:1px solid #BFD7EA;border-radius:8px}' +
+      '.summary .item{padding:10px 14px;border-radius:6px}' +
       '.summary .item.total{background:#F0F4F8;border:1px solid #BFD7EA}' +
       '.summary .item.paid{background:#DAEBE0;border:1px solid #5B9279}' +
       '.summary .item.outstanding{background:#FCEBEB;border:1px solid #B85C5C}' +
-      '.summary .item .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;font-weight:700;margin-bottom:3px}' +
+      '.summary .item .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em;color:#3A6EA5;font-weight:700;margin-bottom:4px}' +
       '.summary .item.paid .lbl{color:#2D5640}' +
       '.summary .item.outstanding .lbl{color:#7A2A2A}' +
-      '.summary .item .val{font-size:14.5px;font-weight:700}' +
-      '.summary .item .sub{font-size:10.5px;color:var(--muted);margin-top:2px}' +
-      'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:11.5px;background:#fff;border-radius:6px;overflow:hidden}' +
-      'th{background:#1B2A41;color:#fff;padding:9px 7px;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.04em}' +
-      'td{padding:7px;border-bottom:1px solid #EDF2F7}' +
+      '.summary .item .val{font-size:16px;font-weight:700}' +
+      '.summary .item .sub{font-size:10.5px;color:#888;margin-top:3px}' +
+      'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px;background:#fff;border-radius:6px;overflow:hidden}' +
+      'th{background:#1B2A41;color:#fff;padding:10px 8px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}' +
+      'td{padding:8px;border-bottom:1px solid #EDF2F7;white-space:nowrap}' +
       'tr:last-child td{border-bottom:none}' +
       '.num{text-align:right;font-family:"SF Mono",Monaco,monospace}' +
-      'tfoot td{background:#DAEBE0;font-weight:700;color:#2D5640;border-bottom:none;font-size:12.5px;padding:9px 7px}' +
-      '.badge{padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap}' +
+      'th.num{text-align:center}' +
+      'tfoot td{background:#DAEBE0;font-weight:700;color:#2D5640;border-bottom:none;font-size:13px;padding:10px 8px}' +
+      '.badge{padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:600;white-space:nowrap}' +
       '.b-paid{background:#DAEBE0;color:#2D5640}' +
       '.b-unpaid{background:#FCE5D2;color:#7A4A1F}' +
       '.b-pending{background:#F1EFE8;color:#6B6660}' +
-      '.narrative{margin:24px 0 16px 0;font-size:12.5px;line-height:1.75;padding:14px 18px;background:#fff;border-left:4px solid #5B9279;border-radius:6px}' +
+      '.narrative{margin:26px 0 16px 0;font-size:13px;line-height:1.75;padding:16px 22px;background:#fff;border-left:4px solid #5B9279;border-radius:6px}' +
       '.signature{margin-top:50px;display:flex;justify-content:space-between;gap:60px}' +
       '.signature div{text-align:center;flex:1}' +
       '.signature .line{border-top:1.5px solid #1B2A41;margin-bottom:8px;margin-top:55px}' +
       '.footnote{font-size:10.5px;color:#888;margin-top:30px;text-align:center;font-style:italic;border-top:1px solid #EDF2F7;padding-top:14px}' +
+      '.table-wrap{overflow-x:auto;border-radius:6px}' +
       '@media print{.action-row{display:none}body{background:#fff;max-width:none;padding:0;margin:0}.header .logo{max-height:60px}}' +
       '.action-row{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}' +
       '.action-row button{padding:10px 22px;border-radius:6px;cursor:pointer;font-weight:700;font-size:13px;border:none}' +
@@ -3631,7 +3639,7 @@ window.generateRekapStatus = function() {
     '<div class="summary">' +
       '<div class="item total"><div class="lbl">Total Pembayaran</div><div class="val">Rp ' + fmtN(totalOngkos, 0) + '</div><div class="sub">' + selected.length + ' batch · ' + fmtN(totalBillable, 2) + ' Kg Setor Bersih</div></div>' +
       '<div class="item paid"><div class="lbl">✅ Sudah Dibayar</div><div class="val">Rp ' + fmtN(paidOngkos, 0) + '</div><div class="sub">' + paid.length + ' batch · ' + fmtN(paidBillable, 2) + ' Kg Setor Bersih</div></div>' +
-      '<div class="item outstanding"><div class="lbl">⏳ Pending Pekerjaan</div><div class="val">Rp ' + fmtN(unpaidOngkos, 0) + '</div><div class="sub">' + unpaid.length + ' batch · ' + fmtN(unpaidBillable, 2) + ' Kg' + (pending.length > 0 ? ' · ' + pending.length + ' masih dikerjakan' : '') + '</div></div>' +
+      '<div class="item outstanding"><div class="lbl">🟡 Pending Pekerjaan</div><div class="val">' + fmtN(pendingKg, 2) + ' Kg</div><div class="sub">' + pending.length + ' batch masih dikerjakan · GB di tangan pekerja</div></div>' +
     '</div>' +
     '<h3 style="margin-top:24px;color:#2D5640;font-size:14px">📋 Detail Batch (' + selected.length + ' batch · urut dari yang terlama)</h3>' +
     '<table>' +
@@ -3674,7 +3682,7 @@ window.generateRekapStatus = function() {
         '<td colspan="2"></td>' +
       '</tr></tfoot>' +
     '</table>' +
-    '<div class="narrative">Status sampai tanggal <strong>' + (__formatIdnDate(today)||today) + '</strong>: <strong>' + pekerja + '</strong> telah menyelesaikan ' + selected.length + ' batch sortasi (Setor Bersih <strong>' + fmtN(totalBillable, 2) + ' Kg</strong>). Dari jumlah tersebut, <strong>Rp ' + fmtN(paidOngkos, 0) + '</strong> sudah dibayar (' + paid.length + ' batch), dan <strong>Rp ' + fmtN(unpaidOngkos, 0) + '</strong> masih pending pembayaran (' + unpaid.length + ' batch). ' + (pending.length > 0 ? 'Plus ' + pending.length + ' batch yang masih dikerjakan (belum dikembalikan). ' : '') + 'Silakan diskusi dengan Pak Adib kapan pembayaran berikutnya akan dilakukan — bisa langsung sekarang atau ditunggu sampai pending pekerjaan ngumpul lebih banyak.</div>' +
+    '<div class="narrative">Status sampai tanggal <strong>' + (__formatIdnDate(today)||today) + '</strong>: <strong>' + pekerja + '</strong> telah mengambil ' + selected.length + ' batch sortasi dengan total nilai <strong>Rp ' + fmtN(totalOngkos, 0) + '</strong> (Setor Bersih ' + fmtN(totalBillable, 2) + ' Kg). Dari jumlah tersebut, <strong>Rp ' + fmtN(paidOngkos, 0) + '</strong> sudah dibayar (' + paid.length + ' batch), dan <strong>Rp ' + fmtN(belumDibayar, 0) + '</strong> belum dibayar (' + belumDibayarBatch + ' batch). ' + (pending.length > 0 ? 'Plus <strong>' + fmtN(pendingKg, 2) + ' Kg GB</strong> masih di tangan ' + pekerja + ' (' + pending.length + ' batch yang masih dikerjakan, belum dikembalikan). ' : '') + 'Silakan diskusi dengan Pak Adib kapan pembayaran berikutnya akan dilakukan — bisa langsung sekarang atau ditunggu sampai pending pekerjaan ngumpul lebih banyak.</div>' +
     '<div class="signature">' +
       '<div><div class="line"></div><strong>' + pekerja + '</strong><br/><span style="font-size:11px;color:#888">(Konfirmasi rekap diterima)</span></div>' +
       '<div><div class="line"></div><strong>Adib Asrori</strong><br/><span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span></div>' +
