@@ -69,16 +69,18 @@
   .qr-section .pay-here-label { font-size: 18px; font-weight: 800; color: var(--plum); margin-bottom: 4px; letter-spacing: 0.5px; text-transform: uppercase; }
   .qr-section .pay-sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; font-style: italic; }
   /* V9.9.1 — Side-by-side payment methods (Bank Transfer | QRIS) */
+  /* V9.9.3 — Equal-height vertical centering for both boxes */
   .pay-methods { display: flex; gap: 14px; justify-content: center; align-items: stretch; flex-wrap: wrap; margin-top: 6px; }
-  .pay-methods .pay-box { flex: 1 1 220px; max-width: 280px; background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 10px; padding: 16px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
-  .pay-methods .pay-box .box-label { font-size: 13px; font-weight: 800; color: var(--plum); margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase; }
-  .pay-methods .bank-box .bsi-logo { max-width: 130px; width: 90%; height: auto; display: block; margin: 4px auto 10px; }
-  .pay-methods .bank-box .bank-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
-  .pay-methods .bank-box .bank-rek { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: 1.5px; margin-bottom: 6px; font-family: 'Courier New', monospace; }
-  .pay-methods .bank-box .bank-an { font-size: 13px; color: var(--text); margin-bottom: 12px; }
-  .pay-methods .bank-box .bank-amount { font-size: 13px; color: var(--plum); font-weight: 700; padding: 6px 12px; background: #FFF8E8; border-radius: 6px; margin-top: auto; }
-  .pay-methods .qris-box .qris-img { max-width: 180px; width: 100%; height: auto; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 6px; }
-  .pay-methods .qris-box .qris-meta { margin-top: 6px; font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+  .pay-methods .pay-box { flex: 1 1 240px; max-width: 290px; background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 10px; padding: 18px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: space-between; min-height: 280px; }
+  .pay-methods .pay-box .box-label { font-size: 13px; font-weight: 800; color: var(--plum); letter-spacing: 0.5px; text-transform: uppercase; }
+  .pay-methods .pay-box .box-mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 14px 0; }
+  .pay-methods .bank-box .bsi-logo { max-width: 170px; width: 95%; height: auto; display: block; margin: 0 auto 16px; }
+  .pay-methods .bank-box .bank-name { font-size: 11px; color: var(--muted); margin-bottom: 10px; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
+  .pay-methods .bank-box .bank-rek { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: 1.5px; margin-bottom: 8px; font-family: 'Courier New', monospace; }
+  .pay-methods .bank-box .bank-an { font-size: 13px; color: var(--text); }
+  .pay-methods .bank-box .bank-amount { font-size: 13px; color: var(--plum); font-weight: 700; padding: 6px 12px; background: #FFF8E8; border-radius: 6px; }
+  .pay-methods .qris-box .qris-img { max-width: 200px; width: 100%; height: auto; display: inline-block; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 8px; }
+  .pay-methods .qris-box .qris-meta { font-size: 10.5px; color: var(--muted); text-align: center; line-height: 1.5; }
   .pay-methods .qris-box .qris-meta b { color: var(--text); }
   .qr-section .nota-footer { margin-top: 14px; font-size: 12px; color: var(--muted); }
   .qr-section .nota-footer b { color: var(--text); }
@@ -327,7 +329,7 @@ function paymentSectionHtml(h, status) {
   const dpPaid = parseFloat(h.dp_paid) || 0;
   const isPartial = status === 'PARTIAL';
   const label = isPartial ? '💳 Bayar Sisa di Sini' : '💳 Bayar di Sini';
-  const sub = isPartial ? 'Scan QRIS untuk pelunasan' : 'Scan QRIS untuk pembayaran · Semua bank & e-wallet';
+  const sub = isPartial ? 'Transfer bank atau scan QRIS untuk pelunasan' : 'Transfer bank atau scan QRIS · Semua bank & e-wallet';
   let breakdownHtml = '';
   if (isPartial && dpPaid > 0) {
     const dpDate = h.paid_date ? fmtDate(h.paid_date) : (h.tanggal ? fmtDate(h.tanggal) : '');
@@ -346,17 +348,21 @@ function paymentSectionHtml(h, status) {
     '<div class="pay-methods">' +
       // Bank Transfer (kiri)
       '<div class="pay-box bank-box">' +
-        '<div class="box-label">🏦 Transfer Bank</div>' +
-        '<img class="bsi-logo" src="assets/logo_bsi.png" alt="Bank Syariah Indonesia" />' +
-        '<div class="bank-name">Bank Syariah Indonesia</div>' +
-        '<div class="bank-rek">7327013507</div>' +
-        '<div class="bank-an">a.n. <b>Adib Asrori</b></div>' +
+        '<div class="box-label">🏦 Bank Transfer</div>' +
+        '<div class="box-mid">' +
+          '<img class="bsi-logo" src="assets/logo_bsi.png" alt="Bank Syariah Indonesia" />' +
+          '<div class="bank-name">Bank Syariah Indonesia</div>' +
+          '<div class="bank-rek">7327013507</div>' +
+          '<div class="bank-an">a.n. <b>Adib Asrori</b></div>' +
+        '</div>' +
         '<div class="bank-amount">' + amountLabel + '<b>' + fmtRp(sisa) + '</b></div>' +
       '</div>' +
       // QRIS (kanan)
       '<div class="pay-box qris-box">' +
         '<div class="box-label">📱 Scan QRIS</div>' +
-        '<img class="qris-img" src="' + QRIS_IMG + '" alt="QRIS BONS CAFE" />' +
+        '<div class="box-mid">' +
+          '<img class="qris-img" src="' + QRIS_IMG + '" alt="QRIS BONS CAFE" />' +
+        '</div>' +
         '<div class="qris-meta"><b>BONS CAFE</b><br>QRIS BNI · NMID ID10265005997343</div>' +
       '</div>' +
     '</div>' +
