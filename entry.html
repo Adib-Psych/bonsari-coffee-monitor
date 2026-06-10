@@ -151,7 +151,7 @@
     <div class="sidebar-header">
       <img id="logo-img" alt="Bonsari Coffee" />
       <h1>Bonsari Coffee</h1>
-      <div class="sub">Entry Dashboard · v1.0</div>
+      <div class="sub">Entry Dashboard · V9.8 A.1.17</div>
     </div>
     <div class="nav-section">
       <div class="nav-section-label">📝 Entry Type</div>
@@ -765,16 +765,70 @@ function populateCustomerDatalist(){
 }
 
 function updateLiveStock(){
-  const cs = REF.stock_hero;
-  if(!cs?.grades) return;
-  const find = code => { const g = cs.grades.find(x=>x.code===code); return g?g.kg:0; };
-  document.getElementById('live-gbo').textContent = fmtN(find('GBO'),1) + ' KG';
-  document.getElementById('live-gbp').textContent = fmtN(find('GBP'),1) + ' KG';
-  document.getElementById('live-gbc').textContent = fmtN(find('Bakalan GBP+GBC'),1) + ' KG';
-  document.getElementById('live-gbl').textContent = fmtN(find('GBL'),1) + ' KG';
-  document.getElementById('live-gbs').textContent = fmtN(find('GBS'),1) + ' KG';
-  document.getElementById('live-rb').textContent = fmtN(find('RB Form'),1) + ' KG';
-  if(STATE.last_sync){ document.getElementById('last-sync').textContent = new Date(STATE.last_sync).toLocaleTimeString('id-ID'); }
+  // V9.8 A.1.17 — Live stock dari API gb_movements aggregate (single source of truth).
+  // window.__liveStock di-set oleh silentEntryPoll setiap 30s + initial fetch.
+  // Fallback ke REF.stock_hero (baseline 5 Mei 2026) kalau API belum loaded.
+  const live = window.__liveStock;
+  let GBO, GBP, GBC, GBL, GBS, RB, ts, isLive;
+
+  if (live && typeof live === 'object' && live.GBO != null) {
+    GBO = live.GBO || 0;
+    GBP = live.GBP || 0;
+    GBC = live.GBC || 0;
+    GBL = live.GBL || 0;
+    GBS = live.GBS || 0;
+    RB = live.RB_FORM || 0;
+    ts = live.computed_at;
+    isLive = true;
+  } else {
+    const cs = REF.stock_hero;
+    if(!cs?.grades) return;
+    const find = code => { const g = cs.grades.find(x=>x.code===code); return g?g.kg:0; };
+    GBO = find('GBO');
+    GBP = find('GBP');
+    GBC = find('Bakalan GBP+GBC');
+    GBL = find('GBL');
+    GBS = find('GBS');
+    RB = find('RB Form');
+    ts = STATE.last_sync;
+    isLive = false;
+  }
+
+  document.getElementById('live-gbo').textContent = fmtN(GBO,1) + ' KG';
+  document.getElementById('live-gbp').textContent = fmtN(GBP,1) + ' KG';
+  document.getElementById('live-gbc').textContent = fmtN(GBC,1) + ' KG';
+  document.getElementById('live-gbl').textContent = fmtN(GBL,1) + ' KG';
+  document.getElementById('live-gbs').textContent = fmtN(GBS,1) + ' KG';
+  document.getElementById('live-rb').textContent = fmtN(RB,1) + ' KG';
+
+  if(ts){
+    const tsLabel = new Date(ts).toLocaleTimeString('id-ID');
+    document.getElementById('last-sync').textContent = isLive ? tsLabel : (tsLabel + ' (baseline 5 Mei)');
+  }
+}
+
+// V9.8 A.1.17 — Aggregate gb_movements ke stock per grade (mirror Reading Dashboard logic).
+function __computeLiveStock(payload){
+  try {
+    const movements = (payload && payload.data && payload.data.gb_movements) || [];
+    if (!Array.isArray(movements) || movements.length === 0) return null;
+    const stockByGrade = { GBO:0, GBP:0, GBC:0, GBL:0, GBS:0, RB_FORM:0 };
+    movements.forEach(m => {
+      const grade = String(m.grade || '').toUpperCase();
+      const lokasi = String(m.lokasi || '');
+      const qty = parseFloat(m.qty_signed) || 0;
+      if (lokasi === 'rb_form') {
+        stockByGrade.RB_FORM += qty;
+      } else if (stockByGrade[grade] !== undefined) {
+        stockByGrade[grade] += qty;
+      }
+    });
+    stockByGrade.computed_at = new Date().toISOString();
+    return stockByGrade;
+  } catch(e) {
+    console.warn('[A.1.17] __computeLiveStock failed:', e.message);
+    return null;
+  }
 }
 
 function setupListeners(){
@@ -1049,14 +1103,30 @@ function setPrice(prefix, val){
 }
 
 function validateStock(prefix, product, qty, validationDivId){
+  // V9.8 A.1.17 — Pakai live stock kalau ada, fallback ke REF.stock_hero baseline.
   const div = document.getElementById(validationDivId);
   div.innerHTML = '';
   if(!product || qty<=0) return;
-  const cs = REF.stock_hero;
-  if(!cs?.grades) return;
-  const g = cs.grades.find(x=>x.code===product);
-  if(g && qty>g.kg){ div.innerHTML = `<div class="vmsg error">⚠️ Stock ${product} hanya ${fmtN(g.kg,2)} KG, tidak cukup untuk ${qty} KG</div>`; }
-  else if(g && qty>g.kg*0.7){ div.innerHTML = `<div class="vmsg warn">⚠️ Akan pakai ${(qty/g.kg*100).toFixed(0)}% stock ${product}</div>`; }
+
+  let stockKg = null;
+  let sourceNote = '';
+  const live = window.__liveStock;
+  if (live && live[product] != null) {
+    stockKg = live[product];
+  } else {
+    const cs = REF.stock_hero;
+    if(!cs?.grades) return;
+    const g = cs.grades.find(x=>x.code===product);
+    if(!g) return;
+    stockKg = g.kg;
+    sourceNote = ' (baseline 5 Mei)';
+  }
+
+  if(qty > stockKg){
+    div.innerHTML = `<div class="vmsg error">⚠️ Stock ${product} hanya ${fmtN(stockKg,2)} KG${sourceNote}, tidak cukup untuk ${qty} KG</div>`;
+  } else if(qty > stockKg*0.7){
+    div.innerHTML = `<div class="vmsg warn">⚠️ Akan pakai ${(qty/stockKg*100).toFixed(0)}% stock ${product}${sourceNote}</div>`;
+  }
 }
 
 function togglePriceRef(type){
@@ -1964,7 +2034,8 @@ window.addEventListener('DOMContentLoaded', function() {
     alert('Dashboard init error: ' + err.message + '\n\nCheck browser console for details.');
   }
   // V8.3: Start backend health ping + new-entry notifier (poll 30s)
-  setTimeout(__startEntryPolling, 5000);
+  // V9.8 A.1.17: Reduced 5000ms → 500ms supaya LIVE STOCK pills update fast pasca page-load.
+  setTimeout(__startEntryPolling, 500);
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -2031,6 +2102,17 @@ async function silentEntryPoll() {
     badge.style.background = 'rgba(91,146,121,0.92)';
     const ts = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
     document.getElementById('sync-badge-text').textContent = 'Sync ON · ' + ts;
+
+    // V9.8 A.1.17 — Compute live stock dari gb_movements + repaint LIVE STOCK pills.
+    // Idempotent per poll — gantikan window.__liveStock setiap fetch sukses.
+    try {
+      const liveStock = __computeLiveStock(j);
+      if (liveStock) {
+        window.__liveStock = liveStock;
+        if (typeof updateLiveStock === 'function') updateLiveStock();
+      }
+    } catch(e) { console.warn('[A.1.17] live stock paint failed:', e.message); }
+
     if (__lastEntrySig === null) { __lastEntrySig = sig; return; }
     if (sig !== __lastEntrySig) {
       const oldCounts = JSON.parse(__lastEntrySig);
