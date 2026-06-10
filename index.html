@@ -3273,6 +3273,7 @@ window.generateBuktiBayar = function(pekerja) {
       '.btn-print{background:#5B9279;color:#fff}.btn-print:hover{background:#4A7965}' +
       '.btn-jpg{background:#3A6EA5;color:#fff}.btn-jpg:hover{background:#2D5680}' +
     '</style>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap" rel="stylesheet">' +
     '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/scr' + 'ipt>' +
     '</head><body>' +
     '<div class="action-row">' +
@@ -3331,8 +3332,18 @@ window.generateBuktiBayar = function(pekerja) {
     '</table>' +
     '<div class="narrative">Dengan ini, <strong>' + pekerja + '</strong> telah menerima pembayaran ongkos sortir kopi sejumlah <strong>Rp ' + fmtN(totalOngkos, 0) + '</strong> (Setor Bersih ' + fmtN(totalBillable, 2) + ' Kg × Rp 3.000 per Kg) untuk total <strong>' + allBatches.length + ' batch sortasi</strong> periode ' + (__formatIdnDate(firstDt)||firstDt) + ' sampai ' + (__formatIdnDate(lastDt)||lastDt) + '. Pembayaran dilakukan dalam ' + (paidDates.length||1) + ' kali transfer pada tanggal: ' + (paidDates.length > 0 ? paidDates.map(d => __formatIdnDate(d)||d).join(', ') : '—') + '.</div>' +
     '<div class="signature">' +
-      '<div><div class="line"></div><strong>' + pekerja + '</strong><br/><span style="font-size:11px;color:#888">(Penerima)</span></div>' +
-      '<div><div class="line"></div><strong>Adib Asrori</strong><br/><span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span></div>' +
+      '<div>' +
+        '<div class="sig-area"><div class="sig-name">' + pekerja + '</div></div>' +
+        '<div class="line"></div>' +
+        '<strong>' + pekerja + '</strong><br/>' +
+        '<span style="font-size:11px;color:#888">(Penerima)</span>' +
+      '</div>' +
+      '<div>' +
+        '<div class="sig-area"><img src="' + __SIGNATURE_ADIB_URL + '" alt="Adib A" onerror="this.outerHTML=\'<div class=\\\'sig-name\\\'>Adib A</div>\'" /></div>' +
+        '<div class="line"></div>' +
+        '<strong>Adib Asrori</strong><br/>' +
+        '<span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span>' +
+      '</div>' +
     '</div>' +
     '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
     '</div>' + // close #receipt-body
@@ -3387,6 +3398,7 @@ window.generateBuktiBayar = function(pekerja) {
 // Receipt header: Logo Bonsari kiri · Title center · Logo Wakaf kanan
 const __LOGO_BONSARI_URL = 'https://adib-psych.github.io/bonsari-coffee-monitor/assets/logo_bonsari.png';
 const __LOGO_WAKAF_URL = 'https://adib-psych.github.io/bonsari-coffee-monitor/assets/logo_wakaf.png';
+const __SIGNATURE_ADIB_URL = 'https://adib-psych.github.io/bonsari-coffee-monitor/assets/signature_adib.png';
 
 window.openRekapSelector = function(pekerja) {
   const sortasiBatches = (window.__bonsariCachedData?.data?.sortasi || D.sortasi_batches || []);
@@ -3590,9 +3602,9 @@ window.generateRekapStatus = function() {
       '.summary .item .sub{font-size:10.5px;color:#888;margin-top:3px}' +
       'table{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px;background:#fff;border-radius:6px;overflow:hidden}' +
       'th{background:#1B2A41;color:#fff;padding:10px 8px;text-align:center;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;white-space:nowrap}' +
-      'td{padding:8px;border-bottom:1px solid #EDF2F7;white-space:nowrap}' +
+      'td{padding:8px;border-bottom:1px solid #EDF2F7;white-space:nowrap;text-align:center}' +
       'tr:last-child td{border-bottom:none}' +
-      '.num{text-align:right;font-family:"SF Mono",Monaco,monospace}' +
+      '.num{font-family:"SF Mono",Monaco,monospace;text-align:center}' +
       'th.num{text-align:center}' +
       'tfoot td{background:#DAEBE0;font-weight:700;color:#2D5640;border-bottom:none;font-size:13px;padding:10px 8px}' +
       '.badge{padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:600;white-space:nowrap}' +
@@ -3600,9 +3612,12 @@ window.generateRekapStatus = function() {
       '.b-unpaid{background:#FCE5D2;color:#7A4A1F}' +
       '.b-pending{background:#F1EFE8;color:#6B6660}' +
       '.narrative{margin:26px 0 16px 0;font-size:13px;line-height:1.75;padding:16px 22px;background:#fff;border-left:4px solid #5B9279;border-radius:6px}' +
-      '.signature{margin-top:50px;display:flex;justify-content:space-between;gap:60px}' +
-      '.signature div{text-align:center;flex:1}' +
-      '.signature .line{border-top:1.5px solid #1B2A41;margin-bottom:8px;margin-top:55px}' +
+      '.signature{margin-top:40px;display:flex;justify-content:space-between;gap:60px}' +
+      '.signature > div{text-align:center;flex:1}' +
+      '.signature .sig-area{height:70px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:4px}' +
+      '.signature .sig-area img{max-height:64px;max-width:160px;object-fit:contain}' +
+      '.signature .sig-name{font-family:"Caveat","Brush Script MT",cursive;font-size:38px;color:#1B2A41;font-weight:600;line-height:1;transform:rotate(-3deg)}' +
+      '.signature .line{border-top:1.5px solid #1B2A41;margin-bottom:8px}' +
       '.footnote{font-size:10.5px;color:#888;margin-top:30px;text-align:center;font-style:italic;border-top:1px solid #EDF2F7;padding-top:14px}' +
       '.table-wrap{overflow-x:auto;border-radius:6px}' +
       '@media print{.action-row{display:none}body{background:#fff;max-width:none;padding:0;margin:0}.header .logo{max-height:60px}}' +
@@ -3611,6 +3626,7 @@ window.generateRekapStatus = function() {
       '.btn-print{background:#5B9279;color:#fff}.btn-print:hover{background:#4A7965}' +
       '.btn-jpg{background:#3A6EA5;color:#fff}.btn-jpg:hover{background:#2D5680}' +
     '</style>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap" rel="stylesheet">' +
     '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/scr' + 'ipt>' +
     '</head><body>' +
     '<div class="action-row">' +
@@ -3684,8 +3700,18 @@ window.generateRekapStatus = function() {
     '</table>' +
     '<div class="narrative">Status sampai tanggal <strong>' + (__formatIdnDate(today)||today) + '</strong>: <strong>' + pekerja + '</strong> telah mengambil ' + selected.length + ' batch sortasi dengan total nilai <strong>Rp ' + fmtN(totalOngkos, 0) + '</strong> (Setor Bersih ' + fmtN(totalBillable, 2) + ' Kg). Dari jumlah tersebut, <strong>Rp ' + fmtN(paidOngkos, 0) + '</strong> sudah dibayar (' + paid.length + ' batch), dan <strong>Rp ' + fmtN(belumDibayar, 0) + '</strong> belum dibayar (' + belumDibayarBatch + ' batch). ' + (pending.length > 0 ? 'Plus <strong>' + fmtN(pendingKg, 2) + ' Kg GB</strong> masih di tangan ' + pekerja + ' (' + pending.length + ' batch yang masih dikerjakan, belum dikembalikan). ' : '') + 'Silakan diskusi dengan Pak Adib kapan pembayaran berikutnya akan dilakukan — bisa langsung sekarang atau ditunggu sampai pending pekerjaan ngumpul lebih banyak.</div>' +
     '<div class="signature">' +
-      '<div><div class="line"></div><strong>' + pekerja + '</strong><br/><span style="font-size:11px;color:#888">(Konfirmasi rekap diterima)</span></div>' +
-      '<div><div class="line"></div><strong>Adib Asrori</strong><br/><span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span></div>' +
+      '<div>' +
+        '<div class="sig-area"><div class="sig-name">' + pekerja + '</div></div>' +
+        '<div class="line"></div>' +
+        '<strong>' + pekerja + '</strong><br/>' +
+        '<span style="font-size:11px;color:#888">(Konfirmasi rekap diterima)</span>' +
+      '</div>' +
+      '<div>' +
+        '<div class="sig-area"><img src="' + __SIGNATURE_ADIB_URL + '" alt="Adib A" onerror="this.outerHTML=\'<div class=\\\'sig-name\\\'>Adib A</div>\'" /></div>' +
+        '<div class="line"></div>' +
+        '<strong>Adib Asrori</strong><br/>' +
+        '<span style="font-size:11px;color:#888">(Pemilik Bonsari Coffee)</span>' +
+      '</div>' +
     '</div>' +
     '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '. Bukan bukti pembayaran transfer.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
     '</div>' + // close #receipt-body
