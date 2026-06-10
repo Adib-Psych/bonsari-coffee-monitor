@@ -3273,7 +3273,7 @@ window.generateBuktiBayar = function(pekerja) {
       '.btn-print{background:#5B9279;color:#fff}.btn-print:hover{background:#4A7965}' +
       '.btn-jpg{background:#3A6EA5;color:#fff}.btn-jpg:hover{background:#2D5680}' +
     '</style>' +
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>' +
+    '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/scr' + 'ipt>' +
     '</head><body>' +
     '<div class="action-row">' +
       '<button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
@@ -3336,7 +3336,7 @@ window.generateBuktiBayar = function(pekerja) {
     '</div>' +
     '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
     '</div>' + // close #receipt-body
-    '<script>' +
+    '<scr' + 'ipt>' +
     'function downloadJPG(){' +
       'var target=document.getElementById("receipt-body");' +
       'var actionRow=document.querySelector(".action-row");' +
@@ -3357,7 +3357,7 @@ window.generateBuktiBayar = function(pekerja) {
         'alert("Download JPG gagal: "+err.message+". Coba pakai Print/Save as PDF.");' +
       '});' +
     '}' +
-    '</script>' +
+    '<\/scr' + 'ipt>' +
     '</body></html>';
 
   const win = window.open('', '_blank', 'width=900,height=950,scrollbars=yes');
@@ -3603,7 +3603,7 @@ window.generateRekapStatus = function() {
       '.btn-print{background:#5B9279;color:#fff}.btn-print:hover{background:#4A7965}' +
       '.btn-jpg{background:#3A6EA5;color:#fff}.btn-jpg:hover{background:#2D5680}' +
     '</style>' +
-    '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>' +
+    '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/scr' + 'ipt>' +
     '</head><body>' +
     '<div class="action-row">' +
       '<button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
@@ -3681,7 +3681,7 @@ window.generateRekapStatus = function() {
     '</div>' +
     '<div class="footnote">Dokumen ini di-generate otomatis oleh Bonsari Coffee Dashboard pada ' + (__formatIdnDate(today)||today) + '. Bukan bukti pembayaran transfer.<br/>Verifikasi data via dashboard: <strong>adib-psych.github.io/bonsari-coffee-monitor</strong></div>' +
     '</div>' + // close #receipt-body
-    '<script>' +
+    '<scr' + 'ipt>' +
     'function downloadJPG(){' +
       'var target=document.getElementById("receipt-body");' +
       'var actionRow=document.querySelector(".action-row");' +
@@ -3702,7 +3702,7 @@ window.generateRekapStatus = function() {
         'alert("Download JPG gagal: "+err.message+". Coba pakai Print/Save as PDF.");' +
       '});' +
     '}' +
-    '</script>' +
+    '<\/scr' + 'ipt>' +
     '</body></html>';
 
   const win = window.open('', '_blank', 'width=900,height=950,scrollbars=yes');
