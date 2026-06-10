@@ -72,7 +72,8 @@
   .pay-methods { display: flex; gap: 14px; justify-content: center; align-items: stretch; flex-wrap: wrap; margin-top: 6px; }
   .pay-methods .pay-box { flex: 1 1 220px; max-width: 280px; background: #FFFFFF; border: 1px dashed var(--accent); border-radius: 10px; padding: 16px 14px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; }
   .pay-methods .pay-box .box-label { font-size: 13px; font-weight: 800; color: var(--plum); margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase; }
-  .pay-methods .bank-box .bank-name { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-align: center; }
+  .pay-methods .bank-box .bsi-logo { max-width: 130px; width: 90%; height: auto; display: block; margin: 4px auto 10px; }
+  .pay-methods .bank-box .bank-name { font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; text-align: center; letter-spacing: 0.3px; }
   .pay-methods .bank-box .bank-rek { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: 1.5px; margin-bottom: 6px; font-family: 'Courier New', monospace; }
   .pay-methods .bank-box .bank-an { font-size: 13px; color: var(--text); margin-bottom: 12px; }
   .pay-methods .bank-box .bank-amount { font-size: 13px; color: var(--plum); font-weight: 700; padding: 6px 12px; background: #FFF8E8; border-radius: 6px; margin-top: auto; }
@@ -346,7 +347,8 @@ function paymentSectionHtml(h, status) {
       // Bank Transfer (kiri)
       '<div class="pay-box bank-box">' +
         '<div class="box-label">🏦 Transfer Bank</div>' +
-        '<div class="bank-name">Bank Syariah Indonesia (BSI)</div>' +
+        '<img class="bsi-logo" src="assets/logo_bsi.png" alt="Bank Syariah Indonesia" />' +
+        '<div class="bank-name">Bank Syariah Indonesia</div>' +
         '<div class="bank-rek">7327013507</div>' +
         '<div class="bank-an">a.n. <b>Adib Asrori</b></div>' +
         '<div class="bank-amount">' + amountLabel + '<b>' + fmtRp(sisa) + '</b></div>' +
