@@ -256,7 +256,8 @@
       <div class="form-sub">Penjualan GB ke customer. Stock auto-update setelah submit.</div>
       <div class="field-row">
         <div class="field"><label>📅 Tanggal</label><input type="date" id="gb-date" /></div>
-        <div class="field customer-with-tag"><label>👤 Customer</label><input type="text" id="gb-customer" list="customers-list" placeholder="Pilih atau ketik baru..." autocomplete="off" /><span class="customer-tag" id="gb-cust-tag" style="display:none"></span></div>
+        <div class="field"><label>🏷️ Jenis</label><select id="gb-jenis" onchange="updateGbSampleMode()"><option value="penjualan">🛒 Penjualan</option><option value="sampel">🎁 Sampel (gratis)</option></select></div>
+        <div class="field customer-with-tag"><label><span id="gb-cust-label">👤 Customer</span></label><input type="text" id="gb-customer" list="customers-list" placeholder="Pilih atau ketik baru..." autocomplete="off" /><span class="customer-tag" id="gb-cust-tag" style="display:none"></span></div>
       </div>
       <button type="button" class="chip" style="margin-bottom:10px" onclick="toggleNewCustomer('gb')">+ Add New Customer</button>
       <div class="new-customer-form" id="gb-new-customer">
@@ -308,7 +309,8 @@
       <div class="form-sub">Penjualan Roast Bean / Ground Coffee per kemasan. Stock GB auto-deduct (×1.25 yield).</div>
       <div class="field-row">
         <div class="field"><label>📅 Tanggal</label><input type="date" id="rb-date" /></div>
-        <div class="field customer-with-tag"><label>👤 Customer</label><input type="text" id="rb-customer" list="customers-list" autocomplete="off" /><span class="customer-tag" id="rb-cust-tag" style="display:none"></span></div>
+        <div class="field"><label>🏷️ Jenis</label><select id="rb-jenis" onchange="updateRbSampleMode()"><option value="penjualan">🛒 Penjualan</option><option value="sampel">🎁 Sampel (gratis)</option></select></div>
+        <div class="field customer-with-tag"><label><span id="rb-cust-label">👤 Customer</span></label><input type="text" id="rb-customer" list="customers-list" autocomplete="off" /><span class="customer-tag" id="rb-cust-tag" style="display:none"></span></div>
       </div>
       <button type="button" class="chip" style="margin-bottom:10px" onclick="toggleNewCustomer('rb')">+ Add New Customer</button>
       <div class="new-customer-form" id="rb-new-customer">
@@ -1324,8 +1326,9 @@ function resetForm(tab){
   });
   pane.querySelectorAll('select').forEach(el=>{ el.selectedIndex = 0; });
   pane.querySelectorAll('.vmsg').forEach(el=>el.remove());
-  if(tab==='sales-gb') recalcGB();
-  if(tab==='sales-rb') recalcRB();
+  // V9.9.5 — restore harga editable + label kalau pernah Sampel
+  if(tab==='sales-gb'){ const j=document.getElementById('gb-jenis'); if(j) j.value='penjualan'; updateGbSampleMode(); recalcGB(); }
+  if(tab==='sales-rb'){ const j=document.getElementById('rb-jenis'); if(j) j.value='penjualan'; updateRbSampleMode(); recalcRB(); }
   if(tab==='sortasi') recalcSortasi();
 }
 
@@ -1359,32 +1362,36 @@ function collectForm(tab){
     const customer = document.getElementById('gb-customer').value.trim();
     const product = document.getElementById('gb-product').value;
     const qty = parseFloat(document.getElementById('gb-qty').value)||0;
-    const price = parseFloat(document.getElementById('gb-price').value)||0;
+    const jenis = (document.getElementById('gb-jenis')||{}).value || 'penjualan';
+    const isSample = jenis === 'sampel';
+    const price = isSample ? 0 : (parseFloat(document.getElementById('gb-price').value)||0);
     const note = document.getElementById('gb-note').value.trim();
     if(!date) errors.push('Tanggal wajib');
-    if(!customer) errors.push('Customer wajib');
+    if(!customer) errors.push(isSample ? 'Penerima Sampel wajib' : 'Customer wajib');
     if(!product) errors.push('Produk wajib');
     if(qty<=0) errors.push('Qty harus > 0');
-    if(price<=0) errors.push('Harga harus > 0');
+    if(!isSample && price<=0) errors.push('Harga harus > 0');
     const cust = getCustomer(customer);
-    data = { id, created, type:'sales-gb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, qty, harga_per_kg:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:qty*price, total_hpp:qty*(HPP_LOCKED[product]||0), catatan:note };
+    data = { id, created, type:'sales-gb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, qty, harga_per_kg:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:qty*price, total_hpp:qty*(HPP_LOCKED[product]||0), is_sample:isSample?'YES':'NO', catatan:note };
   } else if(tab==='sales-rb'){
     const date = document.getElementById('rb-date').value;
     const customer = document.getElementById('rb-customer').value.trim();
     const product = document.getElementById('rb-product').value;
     const pack = document.getElementById('rb-pack').value;
     const packs = parseInt(document.getElementById('rb-packs').value)||1;
-    const price = parseFloat(document.getElementById('rb-price').value)||0;
+    const jenisRb = (document.getElementById('rb-jenis')||{}).value || 'penjualan';
+    const isSampleRb = jenisRb === 'sampel';
+    const price = isSampleRb ? 0 : (parseFloat(document.getElementById('rb-price').value)||0);
     const note = document.getElementById('rb-note').value.trim();
     if(!date) errors.push('Tanggal wajib');
-    if(!customer) errors.push('Customer wajib');
+    if(!customer) errors.push(isSampleRb ? 'Penerima Sampel wajib' : 'Customer wajib');
     if(!product) errors.push('Produk wajib');
     if(packs<=0) errors.push('Jumlah pack > 0');
-    if(price<=0) errors.push('Harga wajib');
+    if(!isSampleRb && price<=0) errors.push('Harga wajib');
     const packKgMap = {'1KG':1,'500gr':0.5,'400gr':0.4,'250gr':0.25,'150gr':0.15,'100gr':0.1};
     const totalKg = (packKgMap[pack]||1)*packs;
     const cust = getCustomer(customer);
-    data = { id, created, type:'sales-rb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, pack, packs, qty_kg:totalKg, harga_per_pack:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:price*packs, total_hpp:totalKg*(HPP_LOCKED[product]||0), gb_equivalent:totalKg*ROAST_YIELD, catatan:note };
+    data = { id, created, type:'sales-rb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, pack, packs, qty_kg:totalKg, harga_per_pack:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:price*packs, total_hpp:totalKg*(HPP_LOCKED[product]||0), gb_equivalent:totalKg*ROAST_YIELD, is_sample:isSampleRb?'YES':'NO', catatan:note };
   } else if(tab==='pengeluaran'){
     const date = document.getElementById('exp-date').value;
     const kategori = document.getElementById('exp-kategori').value;
@@ -1635,6 +1642,36 @@ function recalcProduksiSusut(){
     wEl.style.display = 'none';
     catWajib.style.display = 'none';
   }
+}
+
+// V9.9.5 — Sample mode toggle: disable harga + relabel customer
+function updateGbSampleMode(){
+  const jenis = document.getElementById('gb-jenis').value;
+  const isSample = jenis === 'sampel';
+  const priceEl = document.getElementById('gb-price');
+  const lblEl = document.getElementById('gb-cust-label');
+  const customerEl = document.getElementById('gb-customer');
+  if (priceEl) {
+    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); priceEl.style.background='#F4F0E6'; priceEl.style.color='var(--muted)'; }
+    else { priceEl.removeAttribute('readonly'); priceEl.style.background=''; priceEl.style.color=''; }
+  }
+  if (lblEl) lblEl.textContent = isSample ? '🎁 Penerima Sampel' : '👤 Customer';
+  if (customerEl) customerEl.placeholder = isSample ? 'BRIN, Hendy, atau nama lain...' : 'Pilih atau ketik baru...';
+  if (typeof recalcGB === 'function') recalcGB();
+}
+function updateRbSampleMode(){
+  const jenis = document.getElementById('rb-jenis').value;
+  const isSample = jenis === 'sampel';
+  const priceEl = document.getElementById('rb-price');
+  const lblEl = document.getElementById('rb-cust-label');
+  const customerEl = document.getElementById('rb-customer');
+  if (priceEl) {
+    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); priceEl.style.background='#F4F0E6'; priceEl.style.color='var(--muted)'; }
+    else { priceEl.removeAttribute('readonly'); priceEl.style.background=''; priceEl.style.color=''; }
+  }
+  if (lblEl) lblEl.textContent = isSample ? '🎁 Penerima Sampel' : '👤 Customer';
+  if (customerEl) customerEl.placeholder = isSample ? 'BRIN, Hendy, atau nama lain...' : '';
+  if (typeof recalcRB === 'function') recalcRB();
 }
 
 // V9.9.4 — Update per-KG info hint dari total / qty (read-only display, bukan input)

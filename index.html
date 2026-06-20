@@ -1307,6 +1307,7 @@ function __translateSalesGB(rows) {
       total_penjualan: sales,
       total_hpp: totalHpp,
       margin: harga - hpp,
+      is_sample: String(r.is_sample || '').toUpperCase() === 'YES' ? 'YES' : 'NO',
       catatan: r.catatan || ''
     };
   });
@@ -1361,6 +1362,7 @@ function __translateSalesRB(rows) {
       total_penjualan: sales,
       total_hpp: totalHpp,
       margin: hargaPerKg - hppKg,
+      is_sample: String(r.is_sample || '').toUpperCase() === 'YES' ? 'YES' : 'NO',
       catatan: r.catatan || ''
     };
   });
@@ -2484,8 +2486,8 @@ function renderGB(){
     return true;
   });
   rows.sort((a,b)=>(b.tanggal||'').localeCompare(a.tanggal||''));
-  tb.innerHTML = rows.map(r=>`<tr>
-    <td>${r.tanggal_raw}</td>
+  tb.innerHTML = rows.map(r=>`<tr${r.is_sample==='YES'?' style="background:#FFF8E1"':''}>
+    <td>${r.tanggal_raw}${r.is_sample==='YES'?' <span class="tag" style="background:#FFE0A8;color:#7A4A1F;font-size:9.5px;letter-spacing:0.3px;margin-left:4px">🎁 SAMPEL</span>':''}</td>
     <td>${r.pelanggan||''}</td>
     <td style="font-size:11.5px">${r.produk||''}</td>
     <td><span class="tag tag-gb">${r.kode||''}</span></td>
@@ -2524,8 +2526,8 @@ function renderRB(){
   rows.sort((a,b)=>(b.tanggal||'').localeCompare(a.tanggal||''));
   tb.innerHTML = rows.map(r=>{
     const tagCls = r.kode && r.kode.startsWith('RB') ? 'tag-rb' : 'tag-gc';
-    return `<tr>
-    <td>${r.tanggal_raw}</td>
+    return `<tr${r.is_sample==='YES'?' style="background:#FFF8E1"':''}>
+    <td>${r.tanggal_raw}${r.is_sample==='YES'?' <span class="tag" style="background:#FFE0A8;color:#7A4A1F;font-size:9.5px;letter-spacing:0.3px;margin-left:4px">🎁 SAMPEL</span>':''}</td>
     <td>${r.pelanggan||''}</td>
     <td style="font-size:11.5px">${r.produk||''}</td>
     <td><span class="tag ${tagCls}">${r.kode||''}</span></td>
