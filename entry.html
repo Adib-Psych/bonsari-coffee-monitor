@@ -535,9 +535,10 @@
       </div>
       <div id="prd-variance-warning" style="display:none;background:#FFF3E0;border-left:3px solid #E8975A;padding:10px 12px;font-size:11.5px;color:#7A4A1F;margin:10px 0;border-radius:4px"></div>
       <div style="font-weight:700;color:var(--primary);margin:14px 0 8px;font-size:14px">💰 Biaya Roasting</div>
-      <div class="field-row">
-        <div class="field"><label>Biaya per KG GB input (Rp)</label><input type="number" id="prd-biaya-per-kg" step="500" value="12500" oninput="recalcProduksiBiaya()" /></div>
-        <div class="field"><label>Biaya Total (Rp) <span style="font-size:10px;color:var(--muted)">auto</span></label><input type="number" id="prd-biaya-total" step="1000" /></div>
+      <div class="field">
+        <label>Biaya Roasting Total per Batch (Rp) <span style="font-size:10px;color:var(--muted)">flat sesuai invoice roastery</span></label>
+        <input type="number" id="prd-biaya-total" step="1000" placeholder="mis. 100000" oninput="updateBiayaPerKgInfo()" />
+        <div id="prd-biaya-per-kg-info" style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">—</div>
       </div>
       <div class="field"><label>📦 Biaya Packaging (Rp, opsional)</label><input type="number" id="prd-biaya-packaging" step="500" value="0" /></div>
       <div class="field"><label>📝 Catatan <span id="prd-catatan-wajib" style="color:var(--danger);font-weight:700;display:none">(WAJIB karena variance)</span></label><textarea id="prd-catatan-selesai" rows="2" placeholder="Susut variance / kondisi roastery / observasi..."></textarea></div>
@@ -1467,8 +1468,10 @@ function collectForm(tab){
     const batchId = document.getElementById('prd-batch-id').value;
     const tglK = document.getElementById('prd-tgl-kembali').value;
     const actualOut = parseFloat(document.getElementById('prd-actual-output').value)||0;
-    const biayaPerKg = parseFloat(document.getElementById('prd-biaya-per-kg').value)||0;
     const biayaTotal = parseFloat(document.getElementById('prd-biaya-total').value)||0;
+    // V9.9.4 — Biaya per-KG auto-derived dari total / qty_input (single-field UI)
+    const _qtyForPerKg = __produksiBatchSelected ? (parseFloat(__produksiBatchSelected.qty_input_kg)||0) : 0;
+    const biayaPerKg = _qtyForPerKg > 0 ? Math.round(biayaTotal / _qtyForPerKg) : 0;
     const biayaPackaging = parseFloat(document.getElementById('prd-biaya-packaging').value)||0;
     const catatan = document.getElementById('prd-catatan-selesai').value.trim();
     if(!batchId) errors.push('Pilih batch outstanding dulu');
@@ -1592,8 +1595,9 @@ function onProduksiBatchSelected(){
   document.getElementById('prd-batch-info').innerHTML =
     '<strong>' + b.id + '</strong> · ' + b.qty_input_kg + ' KG ' + b.source_grade + ' → ' + b.target_produk +
     ' @ ' + b.vendor_roastery + ' · expected output: <strong>' + parseFloat(b.expected_output_kg || 0).toFixed(2) + ' KG</strong>';
-  // Pre-fill biaya total based on qty_input * default biaya/KG
-  recalcProduksiBiaya();
+  // V9.9.4 — biaya per-batch flat, reset total field + clear info hint
+  document.getElementById('prd-biaya-total').value = '';
+  updateBiayaPerKgInfo();
 }
 
 function recalcProduksiSusut(){
@@ -1633,11 +1637,16 @@ function recalcProduksiSusut(){
   }
 }
 
-function recalcProduksiBiaya(){
-  if (!__produksiBatchSelected) return;
-  const qtyInput = parseFloat(__produksiBatchSelected.qty_input_kg) || 0;
-  const perKg = parseFloat(document.getElementById('prd-biaya-per-kg').value) || 0;
-  document.getElementById('prd-biaya-total').value = Math.round(qtyInput * perKg);
+// V9.9.4 — Update per-KG info hint dari total / qty (read-only display, bukan input)
+function updateBiayaPerKgInfo(){
+  const infoEl = document.getElementById('prd-biaya-per-kg-info');
+  if (!infoEl) return;
+  if (!__produksiBatchSelected) { infoEl.textContent = '—'; return; }
+  const qty = parseFloat(__produksiBatchSelected.qty_input_kg) || 0;
+  const total = parseFloat(document.getElementById('prd-biaya-total').value) || 0;
+  if (qty <= 0 || total <= 0) { infoEl.textContent = '—'; return; }
+  const perKg = Math.round(total / qty);
+  infoEl.textContent = '≈ Rp ' + perKg.toLocaleString('id-ID') + '/KG GB input (' + qty + ' KG)';
 }
 
 // ============ NOTA / INVOICE — multi-item cart ============
