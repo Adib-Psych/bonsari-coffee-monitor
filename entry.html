@@ -270,7 +270,13 @@
       <div class="field-row-3">
         <div class="field"><label>📦 Produk</label><select id="gb-product"><option value="">-- Pilih --</option><option value="GBO">GBO (Original/Raw)</option><option value="GBC">GBC (Special)</option><option value="GBP">GBP (Premium)</option><option value="GBL">GBL (Lanang)</option><option value="GBS">GBS (Sorted)*</option></select></div>
         <div class="field"><label>⚖️ Qty (KG)</label><input type="number" id="gb-qty" step="any" min="0.01" placeholder="0.00" inputmode="decimal" /></div>
-        <div class="field"><label>💰 Harga/KG</label><input type="number" id="gb-price" step="1000" placeholder="0" /></div>
+        <div class="field" id="gb-price-wrap"><label>💰 Harga/KG</label><input type="number" id="gb-price" step="1000" placeholder="0" /></div>
+      </div>
+      <!-- V9.9.6 — Sampel multi-item: extras hanya muncul saat Jenis=Sampel -->
+      <div id="gb-sampel-extras" style="display:none;margin-top:10px;padding:12px;background:#FFF8E1;border:1px dashed #E8975A;border-radius:8px">
+        <div style="font-size:12px;font-weight:700;color:#7A4A1F;margin-bottom:8px">🎁 Tambah produk sampel ke penerima yang sama:</div>
+        <div id="gb-sampel-items"></div>
+        <button type="button" class="chip" onclick="addSampelItem('gb')">+ Tambah Item</button>
       </div>
       <div class="price-chips" id="gb-price-chips"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">💡 Harga auto-filled berdasarkan customer type. Edit langsung untuk override.</div>
@@ -325,7 +331,13 @@
         <div class="field"><label>📐 Kemasan</label><select id="rb-pack"><option value="1KG">1 KG</option><option value="500gr">500 gr</option><option value="400gr">400 gr</option><option value="250gr">250 gr</option><option value="150gr">150 gr</option><option value="100gr">100 gr</option></select></div>
         <div class="field"><label>🔢 Jumlah Pack</label><input type="number" id="rb-packs" step="1" min="1" value="1" /></div>
       </div>
-      <div class="field"><label>💰 Harga per Pack (Rp)</label><input type="number" id="rb-price" step="500" placeholder="0" /></div>
+      <div class="field" id="rb-price-wrap"><label>💰 Harga per Pack (Rp)</label><input type="number" id="rb-price" step="500" placeholder="0" /></div>
+      <!-- V9.9.6 — Sampel multi-item RB -->
+      <div id="rb-sampel-extras" style="display:none;margin-top:10px;padding:12px;background:#FFF8E1;border:1px dashed #E8975A;border-radius:8px">
+        <div style="font-size:12px;font-weight:700;color:#7A4A1F;margin-bottom:8px">🎁 Tambah produk sampel ke penerima yang sama:</div>
+        <div id="rb-sampel-items"></div>
+        <button type="button" class="chip" onclick="addSampelItem('rb')">+ Tambah Item</button>
+      </div>
       <div class="price-chips" id="rb-price-chips"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">💡 Harga per pack auto-filled. Edit langsung untuk override. Total = Harga × Jumlah Pack.</div>
       <div class="auto-field" style="margin-top:14px"><span class="auto-label">🔒 HPP/KG (locked v2.1):</span><span class="auto-value" id="rb-hpp-value">—</span></div>
@@ -1326,9 +1338,9 @@ function resetForm(tab){
   });
   pane.querySelectorAll('select').forEach(el=>{ el.selectedIndex = 0; });
   pane.querySelectorAll('.vmsg').forEach(el=>el.remove());
-  // V9.9.5 — restore harga editable + label kalau pernah Sampel
-  if(tab==='sales-gb'){ const j=document.getElementById('gb-jenis'); if(j) j.value='penjualan'; updateGbSampleMode(); recalcGB(); }
-  if(tab==='sales-rb'){ const j=document.getElementById('rb-jenis'); if(j) j.value='penjualan'; updateRbSampleMode(); recalcRB(); }
+  // V9.9.5/6 — restore harga editable + label + clear sampel multi-items
+  if(tab==='sales-gb'){ clearSampelExtras('gb'); const j=document.getElementById('gb-jenis'); if(j) j.value='penjualan'; updateGbSampleMode(); recalcGB(); }
+  if(tab==='sales-rb'){ clearSampelExtras('rb'); const j=document.getElementById('rb-jenis'); if(j) j.value='penjualan'; updateRbSampleMode(); recalcRB(); }
   if(tab==='sortasi') recalcSortasi();
 }
 
@@ -1345,6 +1357,43 @@ function submitEntry(tab){
   if (tab === 'sortasi-keluar' || tab === 'sortasi-kembali') bucket = 'sortasi';
   else if (tab === 'produksi-ambil' || tab === 'produksi-selesai') bucket = 'produksi';
   if(!STATE.pending[bucket]) STATE.pending[bucket] = [];
+  // V9.9.6 — kalau sampel multi-item, expand jadi N entries (1 per produk, same customer/tgl)
+  const sampelItems = (r.data && r.data._sampel_items) || null;
+  if (sampelItems && sampelItems.length > 0) {
+    delete r.data._sampel_items; // hapus marker
+    const baseData = r.data;
+    const allEntries = [baseData];
+    sampelItems.forEach(it => {
+      const childId = uid();
+      const child = JSON.parse(JSON.stringify(baseData));
+      child.id = childId;
+      if (tab === 'sales-gb') {
+        child.produk = it.produk;
+        child.qty = it.qty;
+        child.hpp_per_kg = (typeof HPP_LOCKED!=='undefined' ? (HPP_LOCKED[it.produk]||0) : 0);
+        child.total_sales = 0;
+        child.total_hpp = it.qty * child.hpp_per_kg;
+      } else if (tab === 'sales-rb') {
+        child.produk = it.produk;
+        child.pack = it.pack;
+        child.packs = it.packs;
+        const packKgMap = {'1KG':1,'500gr':0.5,'400gr':0.4,'250gr':0.25,'150gr':0.15,'100gr':0.1};
+        child.qty_kg = (packKgMap[it.pack]||1) * it.packs;
+        child.harga_per_pack = 0;
+        child.hpp_per_kg = (typeof HPP_LOCKED!=='undefined' ? (HPP_LOCKED[it.produk]||0) : 0);
+        child.total_sales = 0;
+        child.total_hpp = child.qty_kg * child.hpp_per_kg;
+        child.gb_equivalent = child.qty_kg * (typeof ROAST_YIELD!=='undefined' ? ROAST_YIELD : 1.25);
+      }
+      allEntries.push(child);
+    });
+    allEntries.forEach(d => { STATE.pending[bucket].push(d); if (STATE.webhook_url) syncEntry(bucket, d); });
+    saveState();
+    renderPending(bucket);
+    toast('🎁 ' + allEntries.length + ' produk sampel ke-submit', 'success', 3500);
+    resetForm(tab);
+    return;
+  }
   STATE.pending[bucket].push(r.data);
   saveState();
   renderPending(bucket);
@@ -1373,6 +1422,11 @@ function collectForm(tab){
     if(!isSample && price<=0) errors.push('Harga harus > 0');
     const cust = getCustomer(customer);
     data = { id, created, type:'sales-gb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, qty, harga_per_kg:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:qty*price, total_hpp:qty*(HPP_LOCKED[product]||0), is_sample:isSample?'YES':'NO', catatan:note };
+    // V9.9.6 — attach sampel multi-item extras (jika ada)
+    if (isSample) {
+      const extras = getSampelExtras('gb');
+      if (extras.length > 0) data._sampel_items = extras;
+    }
   } else if(tab==='sales-rb'){
     const date = document.getElementById('rb-date').value;
     const customer = document.getElementById('rb-customer').value.trim();
@@ -1392,6 +1446,11 @@ function collectForm(tab){
     const totalKg = (packKgMap[pack]||1)*packs;
     const cust = getCustomer(customer);
     data = { id, created, type:'sales-rb', status:'pending', tanggal:date, customer, customer_type: cust?cust.type:'New', produk:product, pack, packs, qty_kg:totalKg, harga_per_pack:price, hpp_per_kg:HPP_LOCKED[product]||0, total_sales:price*packs, total_hpp:totalKg*(HPP_LOCKED[product]||0), gb_equivalent:totalKg*ROAST_YIELD, is_sample:isSampleRb?'YES':'NO', catatan:note };
+    // V9.9.6 — attach sampel multi-item extras
+    if (isSampleRb) {
+      const extras = getSampelExtras('rb');
+      if (extras.length > 0) data._sampel_items = extras;
+    }
   } else if(tab==='pengeluaran'){
     const date = document.getElementById('exp-date').value;
     const kategori = document.getElementById('exp-kategori').value;
@@ -1644,34 +1703,93 @@ function recalcProduksiSusut(){
   }
 }
 
-// V9.9.5 — Sample mode toggle: disable harga + relabel customer
+// V9.9.5/6 — Sample mode toggle: disable harga + relabel customer + show multi-item extras
 function updateGbSampleMode(){
   const jenis = document.getElementById('gb-jenis').value;
   const isSample = jenis === 'sampel';
   const priceEl = document.getElementById('gb-price');
+  const priceWrap = document.getElementById('gb-price-wrap');
   const lblEl = document.getElementById('gb-cust-label');
   const customerEl = document.getElementById('gb-customer');
+  const extras = document.getElementById('gb-sampel-extras');
   if (priceEl) {
-    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); priceEl.style.background='#F4F0E6'; priceEl.style.color='var(--muted)'; }
-    else { priceEl.removeAttribute('readonly'); priceEl.style.background=''; priceEl.style.color=''; }
+    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); }
+    else { priceEl.removeAttribute('readonly'); }
   }
+  if (priceWrap) priceWrap.style.display = isSample ? 'none' : '';
   if (lblEl) lblEl.textContent = isSample ? '🎁 Penerima Sampel' : '👤 Customer';
   if (customerEl) customerEl.placeholder = isSample ? 'BRIN, Hendy, atau nama lain...' : 'Pilih atau ketik baru...';
+  if (extras) extras.style.display = isSample ? '' : 'none';
   if (typeof recalcGB === 'function') recalcGB();
 }
 function updateRbSampleMode(){
   const jenis = document.getElementById('rb-jenis').value;
   const isSample = jenis === 'sampel';
   const priceEl = document.getElementById('rb-price');
+  const priceWrap = document.getElementById('rb-price-wrap');
   const lblEl = document.getElementById('rb-cust-label');
   const customerEl = document.getElementById('rb-customer');
+  const extras = document.getElementById('rb-sampel-extras');
   if (priceEl) {
-    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); priceEl.style.background='#F4F0E6'; priceEl.style.color='var(--muted)'; }
-    else { priceEl.removeAttribute('readonly'); priceEl.style.background=''; priceEl.style.color=''; }
+    if (isSample) { priceEl.value = '0'; priceEl.setAttribute('readonly','readonly'); }
+    else { priceEl.removeAttribute('readonly'); }
   }
+  if (priceWrap) priceWrap.style.display = isSample ? 'none' : '';
   if (lblEl) lblEl.textContent = isSample ? '🎁 Penerima Sampel' : '👤 Customer';
   if (customerEl) customerEl.placeholder = isSample ? 'BRIN, Hendy, atau nama lain...' : '';
+  if (extras) extras.style.display = isSample ? '' : 'none';
   if (typeof recalcRB === 'function') recalcRB();
+}
+
+// V9.9.6 — Tambah item sampel extra (multiple produk dlm 1 entry)
+const __GB_PRODUCTS = [['GBO','GBO (Original)'],['GBC','GBC (Special)'],['GBP','GBP (Premium)'],['GBL','GBL (Lanang)'],['GBS','GBS (Sorted)']];
+const __RB_PRODUCTS = [['RBP','RBP (Roast Premium)'],['RBC','RBC (Roast Special)'],['RBL','RBL (Roast Lanang)'],['GCR','GCR (Ground Regular)'],['GCP','GCP (Ground Premium)']];
+function addSampelItem(prefix){
+  const items = document.getElementById(prefix + '-sampel-items');
+  if (!items) return;
+  const PRODUCTS = prefix === 'gb' ? __GB_PRODUCTS : __RB_PRODUCTS;
+  const row = document.createElement('div');
+  row.className = 'sampel-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:6px';
+  const opts = PRODUCTS.map(p => `<option value="${p[0]}">${p[1]}</option>`).join('');
+  if (prefix === 'gb') {
+    row.innerHTML = `
+      <select class="sampel-produk" style="flex:1.3;padding:6px 8px;border:1px solid #DCD4C0;border-radius:4px;font-size:12.5px"><option value="">-- Produk --</option>${opts}</select>
+      <input type="number" class="sampel-qty" step="any" min="0.01" placeholder="Qty KG" style="flex:1;padding:6px 8px;border:1px solid #DCD4C0;border-radius:4px;font-size:12.5px;width:80px" />
+      <button type="button" class="chip" style="background:#FBE3DD;color:#7A2A1F;padding:4px 10px" onclick="this.parentElement.remove()">×</button>
+    `;
+  } else {
+    row.innerHTML = `
+      <select class="sampel-produk" style="flex:1.2;padding:6px 8px;border:1px solid #DCD4C0;border-radius:4px;font-size:12.5px"><option value="">-- Produk --</option>${opts}</select>
+      <select class="sampel-pack" style="flex:0.6;padding:6px 8px;border:1px solid #DCD4C0;border-radius:4px;font-size:12.5px"><option value="1KG">1 KG</option><option value="500gr">500 gr</option><option value="250gr">250 gr</option><option value="100gr">100 gr</option></select>
+      <input type="number" class="sampel-packs" step="1" min="1" value="1" placeholder="Pack" style="flex:0.5;padding:6px 8px;border:1px solid #DCD4C0;border-radius:4px;font-size:12.5px;width:60px" />
+      <button type="button" class="chip" style="background:#FBE3DD;color:#7A2A1F;padding:4px 10px" onclick="this.parentElement.remove()">×</button>
+    `;
+  }
+  items.appendChild(row);
+}
+function getSampelExtras(prefix){
+  const items = document.getElementById(prefix + '-sampel-items');
+  if (!items) return [];
+  const rows = items.querySelectorAll('.sampel-row');
+  const out = [];
+  rows.forEach(r => {
+    if (prefix === 'gb') {
+      const produk = r.querySelector('.sampel-produk').value;
+      const qty = parseFloat(r.querySelector('.sampel-qty').value) || 0;
+      if (produk && qty > 0) out.push({ produk, qty });
+    } else {
+      const produk = r.querySelector('.sampel-produk').value;
+      const pack = r.querySelector('.sampel-pack').value;
+      const packs = parseInt(r.querySelector('.sampel-packs').value) || 0;
+      if (produk && packs > 0) out.push({ produk, pack, packs });
+    }
+  });
+  return out;
+}
+function clearSampelExtras(prefix){
+  const items = document.getElementById(prefix + '-sampel-items');
+  if (items) items.innerHTML = '';
 }
 
 // V9.9.4 — Update per-KG info hint dari total / qty (read-only display, bukan input)
