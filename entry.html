@@ -816,9 +816,15 @@ function updateLiveStock(){
   document.getElementById('live-gbs').textContent = fmtN(GBS,1) + ' KG';
   document.getElementById('live-rb').textContent = fmtN(RB,1) + ' KG';
 
-  if(ts){
-    const tsLabel = new Date(ts).toLocaleTimeString('id-ID');
-    document.getElementById('last-sync').textContent = isLive ? tsLabel : (tsLabel + ' (baseline 5 Mei)');
+  // V9.9.8 FIX A.1.17-b (prinsip M7): selama BELUM live, tampilkan status "memuat"
+  // yang jelas — jangan baseline statis yang terlihat seperti data sync.
+  const lastSyncEl = document.getElementById('last-sync');
+  if (isLive) {
+    lastSyncEl.textContent = ts ? new Date(ts).toLocaleTimeString('id-ID') : '';
+    lastSyncEl.style.color = '';
+  } else {
+    lastSyncEl.textContent = '⏳ memuat stok live… (angka sementara = opname 5 Mei)';
+    lastSyncEl.style.color = '#E89F4D';
   }
 }
 
@@ -2252,8 +2258,12 @@ function __ensureSyncBadge() {
   return __syncBadge;
 }
 
-async function silentEntryPoll() {
-  if (document.hidden) return;
+async function silentEntryPoll(force) {
+  // V9.9.8 FIX A.1.17-b: initial fetch & visibilitychange pakai force=true.
+  // Sebelumnya gate document.hidden memblokir fetch PERTAMA saat tab load di background
+  // → LIVE STOCK pills stuck di baseline 5 Mei (GBP tampil 34 KG padahal live 274 KG).
+  // Polling rutin tetap pause saat hidden (hemat kuota Apps Script, by design V8.3).
+  if (!force && document.hidden) return;
   if (new URLSearchParams(location.search).get('nopolling') === '1') return;
   const url = (STATE && STATE.webhook_url ? STATE.webhook_url : DEFAULT_WEBHOOK) + '?data=all';
   try {
@@ -2310,10 +2320,10 @@ async function silentEntryPoll() {
 
 function __startEntryPolling() {
   __ensureSyncBadge();
-  silentEntryPoll(); // immediate first poll
+  silentEntryPoll(true); // V9.9.8: first poll FORCED — jalan walau tab di background
   if (__entryPollId) clearInterval(__entryPollId);
   __entryPollId = setInterval(silentEntryPoll, __ENTRY_POLL_MS);
-  console.log('[Entry Sync] 🟢 Auto-poll started · every ' + (__ENTRY_POLL_MS / 1000) + 's · pause when tab hidden');
+  console.log('[Entry Sync] 🟢 Auto-poll started · every ' + (__ENTRY_POLL_MS / 1000) + 's · pause when tab hidden · initial fetch forced');
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -2321,7 +2331,7 @@ document.addEventListener('visibilitychange', () => {
     console.log('[Entry Sync] ⏸ Tab hidden — poll paused');
   } else {
     console.log('[Entry Sync] ▶ Tab visible — immediate check');
-    silentEntryPoll();
+    silentEntryPoll(true); // V9.9.8: forced — hindari race gate saat baru visible
   }
 });
 </script>
