@@ -382,6 +382,7 @@
         <div class="field"><label>💰 Total (Rp)</label><input type="number" id="exp-amount" step="1000" placeholder="0" /></div>
         <div class="field" id="exp-supplier-field" style="display:none"><label>👤 Supplier</label><input type="text" id="exp-supplier" list="suppliers-list" /></div>
         <div class="field" id="exp-qty-field" style="display:none"><label>⚖️ Qty (KG)</label><input type="number" id="exp-qty" step="any" placeholder="0.00" inputmode="decimal" /></div>
+        <div class="field" id="exp-ka-field" style="display:none"><label>💧 Kadar Air (%)</label><input type="number" id="exp-kadar-air" step="0.1" placeholder="mis. 11.8" inputmode="decimal" oninput="onKadarAirInput()" /><div id="exp-ka-hint" style="font-size:10.5px;margin-top:3px;color:var(--muted)">SNI maks 12,5% · alat: moisture meter</div></div>
       </div>
       <div class="auto-field" id="exp-extra-info" style="display:none"><span class="auto-label">📊 Harga/KG (auto):</span><span class="auto-value" id="exp-price-per-kg">—</span></div>
       <div class="field"><label>📝 Catatan</label><textarea id="exp-note" rows="2"></textarea></div>
@@ -428,6 +429,9 @@
       <div class="field-row">
         <div class="field"><label>📦 Bakalan (Grade Input)</label><select id="srt-bakalan"><option value="GBO">GBO (Original raw)</option><option value="Bakalan GBP">Bakalan GBP</option><option value="Bakalan GBC">Bakalan GBC</option><option value="Bakalan GBL">Bakalan Lanang</option></select></div>
         <div class="field"><label>⚖️ Qty Input (KG)</label><input type="number" id="srt-input-kg" step="any" placeholder="e.g. 30.5" inputmode="decimal" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>🌾 Asal GB (untuk skor rendemen petani)</label><select id="srt-asal" onchange="onAsalChange()"><option value="">-- Pilih asal --</option></select></div>
       </div>
       <div style="background:#F0F7E8;border-left:3px solid #5B9279;padding:10px 12px;font-size:11.5px;color:#2D5640;margin-top:10px;border-radius:4px">
         💡 Setelah submit: <strong>stok GB akan otomatis berkurang</strong> di tempat, dan <strong>tercatat di tangan pekerja</strong>. Batch ID auto-generated untuk tracking saat kembali.
@@ -746,6 +750,7 @@ function init(){
   document.getElementById('webhook-url').value = STATE.webhook_url || '';
   updateLiveStock();
   renderPekerjaDropdown();   // V9.9.9 — isi dropdown pekerja saat load
+  renderAsalDropdown();      // V9.9.10 — isi dropdown asal GB
   document.getElementById('header-date').textContent = fmtDate(todayStr());
   ['gb-date','rb-date','exp-date','srt-tgl-ambil','adj-date'].forEach(id=>{ const el = document.getElementById(id); if(el) el.value = todayStr(); });
   populateCustomerDatalist();
@@ -826,6 +831,65 @@ function onPekerjaChange(){
   saveState();
   renderPekerjaDropdown(nama);
   toast('✓ Pekerja "' + nama + '" ditambahkan', 'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// V9.9.10 — ASAL GB (atribusi petani untuk skor rendemen %GBS)
+// Stok TIDAK terpengaruh (tetap satu pool GBO). Ini murni label analitik.
+// ═══════════════════════════════════════════════════════════
+const ASAL_BASE = [
+  'GBO 2026 (kebun sendiri)', 'GBO 2025 (kebun sendiri)',
+  'Bu Ina (panen 2025)', 'Bu Yun 2026',
+  'Minto 2026', 'Mbah Mul 2026', 'Kumpul 2026', 'Petani X 2026',
+  'Anto 2025', 'Historis (campuran)', 'Campuran'
+];
+
+function allAsal(){
+  const fromSup = (window.__apiSuppliers || []);   // supplier dari Pengeluaran Pembelian GB
+  const added = (STATE.asal_added || []);
+  const seen = {}, out = [];
+  [...ASAL_BASE, ...fromSup, ...added].forEach(a => {
+    const n = String(a || '').trim(); if (!n) return;
+    const k = n.toLowerCase(); if (seen[k]) return;
+    seen[k] = 1; out.push(n);
+  });
+  return out;
+}
+
+function renderAsalDropdown(selectValue){
+  const sel = document.getElementById('srt-asal'); if (!sel) return;
+  const cur = selectValue || sel.value;
+  sel.innerHTML = '<option value="">-- Pilih asal --</option>'
+    + allAsal().map(a => '<option value="' + a + '">' + a + '</option>').join('')
+    + '<option value="__NEW__">➕ Tambah asal baru…</option>';
+  if (cur && cur !== '__NEW__') sel.value = cur;
+}
+
+function onAsalChange(){
+  const sel = document.getElementById('srt-asal');
+  if (!sel || sel.value !== '__NEW__') return;
+  const nama = (prompt('Asal GB baru:\n(contoh: Pak Slamet 2026)') || '').trim();
+  if (!nama) { sel.value = ''; return; }
+  const dup = allAsal().find(a => a.toLowerCase() === nama.toLowerCase());
+  if (dup) { toast('Asal "' + dup + '" sudah ada', 'warning'); sel.value = dup; return; }
+  STATE.asal_added = STATE.asal_added || [];
+  STATE.asal_added.push(nama); saveState();
+  renderAsalDropdown(nama);
+  toast('✓ Asal "' + nama + '" ditambahkan', 'success');
+}
+
+// Ambil daftar supplier dari data pembelian GB → jadi opsi asal
+function __syncAsalFromApi(payload){
+  try {
+    const rows = (payload && payload.data && payload.data.pengeluaran) || [];
+    const names = [...new Set(rows
+      .filter(r => /pembelian.*green/i.test(String(r.kategori || '')))
+      .map(r => String(r.supplier || '').trim())
+      .filter(Boolean))];
+    const prev = JSON.stringify(window.__apiSuppliers || []);
+    window.__apiSuppliers = names;
+    if (JSON.stringify(names) !== prev) renderAsalDropdown();
+  } catch(e) { console.warn('[V9.9.10] sync asal failed:', e.message); }
 }
 
 // Ambil daftar pekerja yang sudah pernah ada di data (dipanggil dari silentEntryPoll)
@@ -1308,6 +1372,28 @@ function onKategoriChange(){
   document.getElementById('exp-supplier-field').style.display = isPemb?'':'none';
   document.getElementById('exp-qty-field').style.display = isPemb?'':'none';
   document.getElementById('exp-extra-info').style.display = isPemb?'':'none';
+  const ka = document.getElementById('exp-ka-field');           // V9.9.10 kadar air
+  if (ka) ka.style.display = isPemb?'':'none';
+}
+
+// V9.9.10 — feedback langsung ambang SNI (maks 12,5%) saat input kadar air
+function onKadarAirInput(){
+  const el = document.getElementById('exp-kadar-air');
+  const hint = document.getElementById('exp-ka-hint');
+  if (!el || !hint) return;
+  const v = parseFloat(el.value);
+  if (isNaN(v) || el.value === '') {
+    hint.textContent = 'SNI maks 12,5% · alat: moisture meter'; hint.style.color = 'var(--muted)';
+  } else if (v > 12.5) {
+    hint.textContent = '⚠️ ' + v + '% — DI ATAS ambang SNI (maks 12,5%). Perlu jemur ulang / nego harga.';
+    hint.style.color = '#B85C5C';
+  } else if (v < 8) {
+    hint.textContent = '⚠️ ' + v + '% — di bawah 8% (batas ICO). Cek kalibrasi alat.';
+    hint.style.color = '#E89F4D';
+  } else {
+    hint.textContent = '✓ ' + v + '% — memenuhi SNI (8–12,5%).';
+    hint.style.color = '#5B9279';
+  }
 }
 
 function onSortirStatusChange(){
@@ -1531,7 +1617,11 @@ function collectForm(tab){
     if(!desc) errors.push('Deskripsi wajib');
     if(amt<=0) errors.push('Total harus > 0');
     if(kategori==='Pembelian Green Bean' && !sup) errors.push('Supplier wajib');
-    data = { id, created, type:'pengeluaran', status:'pending', tanggal:date, kategori, deskripsi:desc, total:amt, supplier:sup||null, qty:qty||null, harga_per_kg:(amt&&qty)?amt/qty:null, catatan:note };
+    const kaEl = document.getElementById('exp-kadar-air');
+    const kadarAir = kaEl && kaEl.value !== '' ? parseFloat(kaEl.value) : null;
+    if (kategori==='Pembelian Green Bean' && kadarAir !== null && (kadarAir < 0 || kadarAir > 30)) errors.push('Kadar air tidak wajar (0–30%)');
+    data = { id, created, type:'pengeluaran', status:'pending', tanggal:date, kategori, deskripsi:desc, total:amt, supplier:sup||null, qty:qty||null, harga_per_kg:(amt&&qty)?amt/qty:null, catatan:note,
+      kadar_air: kadarAir };  // V9.9.10 — SNI maks 12,5%
   } else if(tab==='sortasi-keluar'){
     // V7 Mode A: GB Keluar
     const pekerja = document.getElementById('srt-pekerja-keluar').value;
@@ -1547,8 +1637,10 @@ function collectForm(tab){
     if(!pekerja) errors.push('Pekerja wajib');
     if(!tglA) errors.push('Tgl ambil wajib');
     if(inp<=0) errors.push('Input KG > 0');
+    const asal = (document.getElementById('srt-asal') || {}).value || '';
     data = { id, created, type:'sortasi', action:'submit_sortasi_keluar', status:'pending',
-      pekerja, batch_status:'kirim', tgl_ambil:tglA, bakalan, grade_input:gradeInput, qty_input:inp };
+      pekerja, batch_status:'kirim', tgl_ambil:tglA, bakalan, grade_input:gradeInput, qty_input:inp,
+      asal };  // V9.9.10 — atribusi petani (analitik rendemen; stok tidak terpengaruh)
   } else if(tab==='sortasi-kembali'){
     // V7 Mode B: GB Kembali — needs batch_id from dropdown
     const batchId = document.getElementById('srt-batch-id').value;
@@ -2350,6 +2442,7 @@ async function silentEntryPoll(force) {
 
     // V9.9.9 — refresh daftar pekerja dari data aktual (auto-detect nama baru)
     try { __syncWorkersFromApi(j); } catch(e) { console.warn('[V9.9.9] worker sync:', e.message); }
+    try { __syncAsalFromApi(j); } catch(e) { console.warn('[V9.9.10] asal sync:', e.message); }
 
     if (__lastEntrySig === null) { __lastEntrySig = sig; return; }
     if (sig !== __lastEntrySig) {
