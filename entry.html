@@ -422,7 +422,7 @@
       <h2>↗️ GB Keluar — Kirim ke Pekerja</h2>
       <div class="form-sub">Saat GB diserahkan ke pekerja untuk disortir. Stok GB akan otomatis berkurang.</div>
       <div class="field-row">
-        <div class="field"><label>👷 Pekerja</label><select id="srt-pekerja-keluar"><option value="">-- Pilih --</option><option value="Mba Etsa">Mba Etsa</option><option value="Mba Pipit">Mba Pipit</option><option value="Ibu Kholifah">Ibu Kholifah</option></select></div>
+        <div class="field"><label>👷 Pekerja</label><select id="srt-pekerja-keluar" onchange="onPekerjaChange()"><option value="">-- Pilih --</option></select></div>
         <div class="field"><label>📅 Tgl Ambil</label><input type="date" id="srt-tgl-ambil" /></div>
       </div>
       <div class="field-row">
@@ -745,6 +745,7 @@ function init(){
   loadState();
   document.getElementById('webhook-url').value = STATE.webhook_url || '';
   updateLiveStock();
+  renderPekerjaDropdown();   // V9.9.9 — isi dropdown pekerja saat load
   document.getElementById('header-date').textContent = fmtDate(todayStr());
   ['gb-date','rb-date','exp-date','srt-tgl-ambil','adj-date'].forEach(id=>{ const el = document.getElementById(id); if(el) el.value = todayStr(); });
   populateCustomerDatalist();
@@ -777,6 +778,66 @@ function populateCustomerDatalist(){
     o.label = c.type;
     list.appendChild(o);
   });
+}
+
+// ═══════════════════════════════════════════════════════════
+// V9.9.9 — MANAJEMEN PEKERJA SORTIR (dropdown dinamis + tambah baru)
+// Sebelumnya: dropdown hardcoded 3 nama → pekerja baru TIDAK BISA dipilih.
+// Sekarang: gabungan (a) nama bawaan, (b) nama dari data API sortasi,
+// (c) nama yang Adib tambah sendiri (tersimpan di localStorage).
+// ═══════════════════════════════════════════════════════════
+const WORKERS_BASE = ['Mba Etsa', 'Ibu Kholifah'];   // Mba Pipit archived (out Des 2025)
+const WORKERS_ARCHIVED = ['Mba Pipit'];
+
+function allWorkers(){
+  const fromApi = (window.__apiWorkers || []);
+  const added = (STATE.workers_added || []);
+  const seen = {}, out = [];
+  [...WORKERS_BASE, ...fromApi, ...added].forEach(w => {
+    const n = String(w || '').trim();
+    if (!n) return;
+    const key = n.toLowerCase().replace(/\s*\([^)]*\)\s*$/, '').trim(); // dedup "X (Catch-up)" == "X"
+    if (seen[key]) return;
+    if (WORKERS_ARCHIVED.some(a => a.toLowerCase() === key)) return;    // sembunyikan yang arsip
+    seen[key] = 1; out.push(n);
+  });
+  return out.sort((a, b) => a.localeCompare(b, 'id', { sensitivity: 'base' }));
+}
+
+function renderPekerjaDropdown(selectValue){
+  const sel = document.getElementById('srt-pekerja-keluar');
+  if (!sel) return;
+  const cur = selectValue || sel.value;
+  sel.innerHTML = '<option value="">-- Pilih --</option>'
+    + allWorkers().map(w => '<option value="' + w + '">' + w + '</option>').join('')
+    + '<option value="__NEW__">➕ Tambah pekerja baru…</option>';
+  if (cur && cur !== '__NEW__') sel.value = cur;
+}
+
+function onPekerjaChange(){
+  const sel = document.getElementById('srt-pekerja-keluar');
+  if (!sel || sel.value !== '__NEW__') return;
+  const nama = (prompt('Nama pekerja sortir baru:\n(contoh: Bu Sri, Mas Yanto)') || '').trim();
+  if (!nama) { sel.value = ''; return; }
+  const dup = allWorkers().find(w => w.toLowerCase() === nama.toLowerCase());
+  if (dup) { toast('Pekerja "' + dup + '" sudah ada', 'warning'); sel.value = dup; return; }
+  STATE.workers_added = STATE.workers_added || [];
+  STATE.workers_added.push(nama);
+  saveState();
+  renderPekerjaDropdown(nama);
+  toast('✓ Pekerja "' + nama + '" ditambahkan', 'success');
+}
+
+// Ambil daftar pekerja yang sudah pernah ada di data (dipanggil dari silentEntryPoll)
+function __syncWorkersFromApi(payload){
+  try {
+    const rows = (payload && payload.data && payload.data.sortasi) || [];
+    if (!rows.length) return;
+    const names = [...new Set(rows.map(r => String(r.pekerja || '').trim()).filter(Boolean))];
+    const prev = JSON.stringify(window.__apiWorkers || []);
+    window.__apiWorkers = names;
+    if (JSON.stringify(names) !== prev) renderPekerjaDropdown();
+  } catch(e) { console.warn('[V9.9.9] sync workers failed:', e.message); }
 }
 
 function updateLiveStock(){
@@ -2286,6 +2347,9 @@ async function silentEntryPoll(force) {
         if (typeof updateLiveStock === 'function') updateLiveStock();
       }
     } catch(e) { console.warn('[A.1.17] live stock paint failed:', e.message); }
+
+    // V9.9.9 — refresh daftar pekerja dari data aktual (auto-detect nama baru)
+    try { __syncWorkersFromApi(j); } catch(e) { console.warn('[V9.9.9] worker sync:', e.message); }
 
     if (__lastEntrySig === null) { __lastEntrySig = sig; return; }
     if (sig !== __lastEntrySig) {
