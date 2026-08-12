@@ -221,9 +221,9 @@ footer a{color:var(--steel);text-decoration:none}
     <!-- 4 main KPI cards -->
     <div class="kpi-grid" style="grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px">
       <div class="kpi success" style="background:#DAEBE0;border:2px solid #5B9279">
-        <div class="label" style="color:#2D5640;font-weight:700">💼 Cash Liquid Operasional <span style="font-size:10px;background:#FFF3E0;color:#7A4A1F;padding:2px 6px;border-radius:6px;font-weight:600;text-transform:none;letter-spacing:0;margin-left:4px">excl. inventory</span></div>
+        <div class="label" style="color:#2D5640;font-weight:700">🏦 Saldo Formal <span style="font-size:10px;background:#FFF3E0;color:#7A4A1F;padding:2px 6px;border-radius:6px;font-weight:600;text-transform:none;letter-spacing:0;margin-left:4px">cash + stock</span></div>
         <div class="value" id="cp-saldo-rek" style="color:#2D5640;font-size:18px"><span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> —</div>
-        <div class="sub">Cash Liquid (excl. stock)</div>
+        <div class="sub" id="cp-saldo-rek-sub">Modal + Sales − Pengeluaran</div>
       </div>
       <div class="kpi" style="background:#E0EBF5;border:2px solid #3A6EA5">
         <div class="label" style="color:#1B2A41;font-weight:700">📈 Total Hasil Penjualan</div>
@@ -4898,7 +4898,10 @@ function renderOverview(){
     cpBadge.textContent = 'Per ' + asOfDate + ' · Stock ' + fmtN(stockKg, 3) + ' KG · live';
   }
   const setHtml = (id, val) => { const el = document.getElementById(id); if (el) el.innerHTML = '<span style="font-size:11px;color:var(--muted);font-weight:400">Rp</span> ' + fmtN(val,0); };
-  setHtml('cp-saldo-rek', CP.cash_liquid);
+  // V9.9.8c — B.1 (Adib Q3 pilihan a, 9 Jun 2026): kartu utama tampilkan saldo_formal.
+  setHtml('cp-saldo-rek', CP.saldo_formal);
+  const __srSub = document.getElementById('cp-saldo-rek-sub');
+  if (__srSub) __srSub.textContent = 'Cash liquid (excl. stock): Rp ' + fmtN(CP.cash_liquid, 0);
   setHtml('cp-sales', CP.sales);
   setHtml('cp-pengeluaran', CP.peng_riil);
   setHtml('cp-stock-tertahan', CP.stock_value);
