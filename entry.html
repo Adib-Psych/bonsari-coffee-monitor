@@ -2220,6 +2220,31 @@ async function submitNota(){
       const notaUrl = location.href.replace(/entry\.html.*$/, '') + 'nota.html?nota=' + encodeURIComponent(json.nota_id);
       window.open(notaUrl, '_blank');
       resetNota();
+    } else if (json && json.duplicate) {
+      // V9.9.11 -- guard entri ganda (ADR-026). Beri pilihan, jangan kunci Adib.
+      const lanjut = confirm(
+        '⚠️ KEMUNGKINAN DOBEL\n\n' + json.error +
+        '\n\nKlik OK hanya kalau ini BENAR-BENAR penjualan terpisah.\n' +
+        'Klik Cancel kalau ini nota untuk penjualan yang tadi sudah dientri manual.'
+      );
+      if (lanjut) {
+        payload.force = true;
+        const r2 = await fetch(url, {
+          method:'POST', headers:{'Content-Type':'text/plain'},
+          body: JSON.stringify(payload)
+        });
+        let j2; try { j2 = JSON.parse(await r2.text()); } catch(e){}
+        if (j2 && j2.ok) {
+          toast('✅ Nota ' + j2.nota_id + ' dibuat (dipaksa) · Rp ' + Math.round(j2.total).toLocaleString('id-ID'),'success', 6000);
+          const notaUrl2 = location.href.replace(/entry\.html.*$/, '') + 'nota.html?nota=' + encodeURIComponent(j2.nota_id);
+          window.open(notaUrl2, '_blank');
+          resetNota();
+        } else {
+          toast('Submit gagal: ' + (j2?.error || 'unknown'), 'error');
+        }
+      } else {
+        toast('Nota dibatalkan — omzet aman dari dobel hitung', 'success', 5000);
+      }
     } else {
       toast('Submit gagal: ' + (json?.error || 'unknown'), 'error');
     }
